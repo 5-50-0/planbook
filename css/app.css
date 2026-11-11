@@ -121,17 +121,18 @@ input:focus,select:focus,textarea:focus{outline:2px solid #A9C7F2;outline-offset
 
 /* 시트·패널 */
 .dim{position:fixed;inset:0;background:rgba(17,17,17,.45);z-index:40}
-.sheet{position:fixed;left:0;right:0;bottom:0;max-height:92%;overflow-y:auto;background:#fff;z-index:41;padding:10px 18px calc(24px + env(safe-area-inset-bottom))}
-.sheet .grab{width:40px;height:4px;background:#D0D0D0;margin:0 auto 14px}
-.wide .sheet{left:auto;top:0;bottom:0;right:0;width:440px;max-height:none;border-left:1.5px solid #111;padding:24px}
-.wide .sheet .grab{display:none}
+.sheet{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(92vw,460px);max-height:88vh;overflow-y:auto;background:#fff;z-index:41;padding:18px}
+.sheet .grab{display:none}
+.wide .sheet{padding:22px}
+
 .band{display:flex;justify-content:space-between;align-items:center;font-size:17px;font-weight:500;padding:6px 6px 6px 14px;min-height:46px;word-break:break-all}
 .band .x{width:36px;height:36px;color:inherit;display:flex;align-items:center;justify-content:center;flex:none}
 .band .x svg{width:20px;height:20px}
 .seg{display:grid;border:1.5px solid #111}
 .seg button{height:42px;font-size:14px}
 .seg button.on{background:#111;color:#fff;font-weight:500}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+input[type=date]{min-width:0;padding:0 8px}
 .acts{display:flex;gap:8px;margin-top:22px}
 .acts .btn{flex:1}
 .acts .btn.pri{flex:2}

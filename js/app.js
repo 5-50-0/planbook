@@ -5,7 +5,7 @@ import {
   itemsOnDay, sortDay, layoutWeek, textOn, PALETTE, uid, esc, isCarried,
 } from './util.js';
 
-export const APP_VERSION = '1.0.1';
+export const APP_VERSION = '1.0.2';
 
 const IC = {
   l: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M15 6l-6 6 6 6"/></svg>',

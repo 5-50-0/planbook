@@ -5,7 +5,7 @@ import {
   itemsOnDay, sortDay, layoutWeek, textOn, PALETTE, uid, esc, isCarried,
 } from './util.js';
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.0.1';
 
 const IC = {
   l: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M15 6l-6 6 6 6"/></svg>',
@@ -130,8 +130,8 @@ function monthBody() {
     days.forEach((d, i) => {
       const cls = ['cell', dayClass(d), parse(d).getMonth() !== m ? 'other' : '', d === today ? 'today' : '', W && d === S.sel ? 'sel' : ''].join(' ');
       const hol = HOLIDAYS[d] && W ? `<span class="hn">${HOLIDAYS[d]}</span>` : '';
-      const more = hidden[i] ? `<span class="more">+${hidden[i]}</span>` : '';
-      h += `<button class="${cls}" style="grid-column:${i + 1}" data-act="day" data-d="${d}" aria-label="${fmtMD(d)}"><span class="n">${parse(d).getDate()}</span>${hol}${more}</button>`;
+      const more = hidden[i] ? `<span class="more" data-act="daySheet" data-d="${d}">+${hidden[i]}</span>` : '';
+      h += `<button class="${cls}" style="grid-column:${i + 1}" data-act="addOn" data-d="${d}" aria-label="${fmtMD(d)} 새 일정"><span class="n">${parse(d).getDate()}</span>${hol}${more}</button>`;
     });
     segs.filter((s) => s.lane < maxL).forEach((s) => {
       const c = colorOf(s.item);
@@ -254,7 +254,8 @@ function editHtml(sh) {
   const subOpts = `<option value="">세분류 없음</option>` + ((cat && cat.subs) || []).map((x) => `<option value="${x.id}" ${x.id === it.sub ? 'selected' : ''}>${esc(x.name)}</option>`).join('');
   return `<div class="grab"></div>
     <div class="band" style="background:${c};color:${textOn(c)}"><span id="bandT">${esc(it.title || (isTodo ? '새 할 일' : '새 일정'))}</span><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div>
-    ${isTodo ? `<span class="lb">상태</span><div class="seg" style="grid-template-columns:repeat(3,1fr)">${[['progress', '진행'], ['done', '완료'], ['cancel', '취소']].map(([k, l]) => `<button class="${st === k ? 'on' : ''}" data-act="status" data-v="${k}">${l}</button>`).join('')}</div>` : ''}
+    ${sh.isNew ? `<div class="seg" style="grid-template-columns:1fr 1fr;margin-top:12px">${[['event', '일정'], ['todo', '할 일']].map(([k, l]) => `<button class="${it.type === k ? 'on' : ''}" data-act="setType" data-v="${k}">${l}</button>`).join('')}</div>` : ''}
+    ${isTodo && !sh.isNew ? `<span class="lb">상태</span><div class="seg" style="grid-template-columns:repeat(3,1fr)">${[['progress', '진행'], ['done', '완료'], ['cancel', '취소']].map(([k, l]) => `<button class="${st === k ? 'on' : ''}" data-act="status" data-v="${k}">${l}</button>`).join('')}</div>` : ''}
     <label class="lb" for="f_title">제목</label><input id="f_title" data-f="title" value="${esc(it.title || '')}">
     ${isTodo
       ? `<label class="lb" for="f_start">날짜</label><input id="f_start" type="date" data-f="start" value="${it.start}">`
@@ -327,6 +328,12 @@ function closeSheet(fromPop) {
 }
 window.addEventListener('popstate', () => closeSheet(true));
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
+
+function newForm(d) {
+  const draft = newItem('event', d);
+  if (S.sheet) { S.sheet = { kind: 'edit', draft, isNew: true }; S.delArm = false; render(); }
+  else openSheet({ kind: 'edit', draft, isNew: true });
+}
 
 function newItem(type, d) {
   const cat = S.settings.cats[0];
@@ -407,8 +414,11 @@ const ACT = {
     const it = S.items.find((x) => x.id === el.dataset.id);
     if (it) openSheet({ kind: 'edit', draft: { ...it }, isNew: false });
   },
-  choose: () => openSheet({ kind: 'choose', d: S.view === 'month' && wide() ? S.sel : (S.view === 'week' ? S.sel : todayStr()) }),
-  newOn: (el) => { S.sel = el.dataset.d; openSheet({ kind: 'choose', d: el.dataset.d }); },
+  choose: () => newForm(S.view === 'month' && wide() ? S.sel : (S.view === 'week' ? S.sel : todayStr())),
+  newOn: (el) => { S.sel = el.dataset.d; newForm(el.dataset.d); },
+  addOn: (el) => { S.sel = el.dataset.d; newForm(el.dataset.d); },
+  daySheet: (el) => { S.sel = el.dataset.d; openSheet({ kind: 'day', d: el.dataset.d }); },
+  setType: (el) => { const d = S.sheet.draft; d.type = el.dataset.v; if (d.type === 'event') d.end = d.end && d.end >= d.start ? d.end : d.start; render(); },
   newType: (el) => { const d = S.sheet?.d || S.sel; S.sheet = { kind: 'edit', draft: newItem(el.dataset.v, d), isNew: true }; render(); setTimeout(() => document.getElementById('f_title')?.focus(), 30); },
   close: () => closeSheet(),
   status: (el) => setStatus(el.dataset.v),

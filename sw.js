@@ -1,6 +1,6 @@
 // 설치형 앱용: 인터넷이 되면 항상 새 파일, 안 되면 저장해 둔 파일
-const CACHE = 'planbook-v1.0.0';
-const SHELL = ['./', './index.html', './css/app.css?v=1.0.0', './js/app.js?v=1.0.0', './manifest.webmanifest', './icons/icon-192.png'];
+const CACHE = 'planbook-v1.0.1';
+const SHELL = ['./', './index.html', './css/app.css?v=1.0.1', './js/app.js?v=1.0.1', './manifest.webmanifest', './icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

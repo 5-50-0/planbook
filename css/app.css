@@ -93,7 +93,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid #A9C7F2;outline-offset
 
 /* 상자 (위클리·목록) */
 .card{border:1.5px solid var(--c);margin:0 0 7px;display:block;width:100%;text-align:left;background:#fff}
-.card .ch{background:var(--c);color:var(--t);font-size:13px;font-weight:500;line-height:18px;padding:5px 8px;word-break:break-all}
+.card .ch{background:var(--c);color:var(--t);font-size:13px;font-weight:500;line-height:18px;padding:5px 8px;white-space:nowrap;overflow:hidden}
 .card .cm{padding:6px 8px;font-size:12px;line-height:18px;white-space:pre-line;word-break:break-all;color:#111}
 .wide .card .ch{font-size:14px;padding:6px 10px}
 .wide .card .cm{font-size:13px;padding:7px 10px}
@@ -164,3 +164,4 @@ input:focus,select:focus,textarea:focus{outline:2px solid #A9C7F2;outline-offset
 .phone .head .ico{width:36px}
 .phone .big h1{font-size:56px}
 .phone .big{gap:8px}
+.cell .more{position:relative;z-index:2;padding:0 4px;margin-left:auto;margin-right:2px}

@@ -1,5 +1,5 @@
 // 설치형 앱용: 인터넷이 되면 항상 새 파일, 안 되면 저장해 둔 파일
-const CACHE = 'planbook-v1.4.1';
+const CACHE = 'planbook-v1.4.2';
 const SHELL = ['./', './index.html', './css/app.css?v=1.2.0', './js/app.js?v=1.2.0', './manifest.webmanifest', './icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {

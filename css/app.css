@@ -329,3 +329,15 @@ table.sal tr.co td{background:#F4F4F4;font-weight:500;font-size:12px;color:#111;
 .sorthd{display:flex;justify-content:space-between;align-items:center;margin:12px 0 2px;font-size:13px;color:#6B6B6B}
 .sorthd button{font-size:12px;border:1px solid #111;padding:2px 8px;color:#111}
 .sorthd.lb{margin:16px 0 6px}
+
+/* 먼슬리 할 일: 체크박스 + 글자 (할 일 색) */
+.month .chip.td{background:transparent!important;color:var(--tc);display:flex;align-items:center;gap:3px;padding:0 2px}
+.month .chip.td .cb{width:10px;height:10px;border:1.3px solid var(--tb);flex:none;display:flex;align-items:center;justify-content:center;background:#fff}
+.month .chip.td .cb.on{background:var(--tl);border-color:var(--tl);color:#fff}
+.month .chip.td .cb svg{width:9px;height:9px}
+.month .chip.td .tt{overflow:hidden;white-space:nowrap;color:var(--tc)}
+.month .chip.td.done .tt{color:var(--tl)}
+.month .chip.td.other .tt{color:var(--tl)}
+.month .chip.td.other .cb{border-color:var(--tl)}
+.wide .month .chip.td .cb{width:13px;height:13px}
+.wide .month .chip.td .cb svg{width:11px;height:11px}

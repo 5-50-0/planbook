@@ -7,7 +7,7 @@ import {
 import { occItems, occDates, nextOcc, ruleText, lunarToSolar } from './routine.js';
 import { writeXlsx, buildIcs, downloadBlob, stampName } from './export.js';
 
-export const APP_VERSION = '1.4.1';
+export const APP_VERSION = '1.4.2';
 
 const NI = {
   month: '<rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M8 2.5v4M16 2.5v4"/><circle cx="8" cy="14" r=".6"/><circle cx="12" cy="14" r=".6"/><circle cx="16" cy="14" r=".6"/><circle cx="8" cy="17.3" r=".6"/><circle cx="12" cy="17.3" r=".6"/>',
@@ -181,6 +181,13 @@ function monthBody() {
         const p1 = (lead / s.span) * 100, p2 = 100 - (tail / s.span) * 100;
         bg = `linear-gradient(to right,${f} 0 ${p1}%,${c} ${p1}% ${p2}%,${f} ${p2}% 100%)`;
       }
+      if (s.item.type === 'todo') {
+        const st = s.item.status || 'progress', isR = s.item.id.startsWith('r~');
+        const done = st !== 'progress';
+        const tc = colorOf(s.item);
+        h += `<button class="${cls} td ${done ? 'done' : ''}" style="grid-column:${s.col + 1}/span ${s.span};grid-row:${s.lane + 2};--tc:${shadeHex(tc, 0.3)};--tb:${shadeHex(tc, 0.15)};--tl:${fadeHex(tc)}" data-act="open" data-id="${s.item.id}"><span class="cb ${st === 'done' ? 'on' : ''}" ${isR ? '' : `data-act="tdTog" data-id="${s.item.id}"`} role="checkbox" aria-checked="${st === 'done'}" aria-label="완료">${st === 'done' ? IC.check : ''}</span><span class="tt">${esc(s.item.title || '(제목 없음)')}</span></button>`;
+        return;
+      }
       h += `<button class="${cls}" style="grid-column:${s.col + 1}/span ${s.span};grid-row:${s.lane + 2};background:${bg};color:${textOn(c)}" data-act="open" data-id="${s.item.id}">${esc(s.item.title || '(제목 없음)')}</button>`;
     });
     h += '</div>';
@@ -188,6 +195,10 @@ function monthBody() {
   return `<div class="month">${h}</div>`;
 }
 
+function shadeHex(hex, k) {
+  const n = parseInt(hex.slice(1), 16), dk = (v) => Math.round(v * (1 - k));
+  return `rgb(${dk(n >> 16)},${dk((n >> 8) & 255)},${dk(n & 255)})`;
+}
 function fadeHex(hex) {
   const n = parseInt(hex.slice(1), 16), mix = (v) => Math.round(v + (255 - v) * 0.62);
   return `rgb(${mix(n >> 16)},${mix((n >> 8) & 255)},${mix(n & 255)})`;
@@ -1676,7 +1687,18 @@ const dragEnd = () => {
 $app.addEventListener('pointerup', dragEnd);
 $app.addEventListener('pointercancel', dragEnd);
 
-Object.assign(ACT, PJ_ACT, SAL_ACT, SORT_ACT);
+const TD_ACT = {
+  // 먼슬리 체크박스: 진행 ↔ 완료. 지난 할 일은 등록일자에 그대로 완료로 남김
+  tdTog: (el) => {
+    const it = S.items.find((x) => x.id === el.dataset.id);
+    if (!it) return;
+    const st = it.status || 'progress';
+    const next = { ...it, status: st === 'done' ? 'progress' : 'done' };
+    if (next.status === 'progress' && it.origStart) { next.start = it.origStart; delete next.origStart; }
+    save('items', next);
+  },
+};
+Object.assign(ACT, PJ_ACT, SAL_ACT, SORT_ACT, TD_ACT);
 
 // ---------- 입력 ----------
 $app.addEventListener('click', (e) => {

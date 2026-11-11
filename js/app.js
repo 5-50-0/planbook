@@ -7,7 +7,7 @@ import {
 import { occItems, occDates, nextOcc, ruleText, lunarToSolar } from './routine.js';
 import { writeXlsx, buildIcs, downloadBlob, stampName } from './export.js';
 
-export const APP_VERSION = '1.4.2';
+export const APP_VERSION = '1.4.3';
 
 const NI = {
   month: '<rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M8 2.5v4M16 2.5v4"/><circle cx="8" cy="14" r=".6"/><circle cx="12" cy="14" r=".6"/><circle cx="16" cy="14" r=".6"/><circle cx="8" cy="17.3" r=".6"/><circle cx="12" cy="17.3" r=".6"/>',
@@ -185,7 +185,7 @@ function monthBody() {
         const st = s.item.status || 'progress', isR = s.item.id.startsWith('r~');
         const done = st !== 'progress';
         const tc = colorOf(s.item);
-        h += `<button class="${cls} td ${done ? 'done' : ''}" style="grid-column:${s.col + 1}/span ${s.span};grid-row:${s.lane + 2};--tc:${shadeHex(tc, 0.3)};--tb:${shadeHex(tc, 0.15)};--tl:${fadeHex(tc)}" data-act="open" data-id="${s.item.id}"><span class="cb ${st === 'done' ? 'on' : ''}" ${isR ? '' : `data-act="tdTog" data-id="${s.item.id}"`} role="checkbox" aria-checked="${st === 'done'}" aria-label="완료">${st === 'done' ? IC.check : ''}</span><span class="tt">${esc(s.item.title || '(제목 없음)')}</span></button>`;
+        h += `<button class="${cls} td ${done ? 'done' : ''}" style="grid-column:${s.col + 1}/span ${s.span};grid-row:${s.lane + 2};--tc:${shadeHex(tc, 0.55)};--tb:${shadeHex(tc, 0.4)};--tl:${shadeHex(tc, 0.08)}" data-act="open" data-id="${s.item.id}"><span class="cb ${st === 'done' ? 'on' : ''}" ${isR ? '' : `data-act="tdTog" data-id="${s.item.id}"`} role="checkbox" aria-checked="${st === 'done'}" aria-label="완료">${st === 'done' ? IC.check : ''}</span><span class="tt">${esc(s.item.title || '(제목 없음)')}</span></button>`;
         return;
       }
       h += `<button class="${cls}" style="grid-column:${s.col + 1}/span ${s.span};grid-row:${s.lane + 2};background:${bg};color:${textOn(c)}" data-act="open" data-id="${s.item.id}">${esc(s.item.title || '(제목 없음)')}</button>`;
@@ -517,6 +517,7 @@ function roccHtml() {
   let h = band(c, r.title);
   h += `<div class="row">${fmtMD(sh.d)}<span class="vl">${esc(ruleText(r))}</span></div>`;
   if (r.kind === 'todo') h += `<span class="lb">이날 상태</span>${seg([['progress', '진행'], ['done', '완료'], ['cancel', '취소']], sh.status, 'roccStatus')}`;
+  if (r.kind === 'todo' && sh.status !== 'progress') h += field(sh.status === 'cancel' ? '취소한 날' : '완료한 날', 'at', sh.at || sh.d, 'date');
   if (r.memo) h += `<div class="cm" style="padding:10px 0;white-space:pre-line;font-size:14px">${esc(r.memo)}</div>`;
   return h + `<div class="acts"><button class="btn" data-act="rtOpen" data-id="${r.id}">루틴 수정</button>${r.kind === 'todo' ? '<button class="btn pri" data-act="roccSave">저장</button>' : ''}</div>`;
 }
@@ -1414,7 +1415,7 @@ const ACT = {
     if (id.startsWith('r~')) {
       const [, rid, d] = id.split('~');
       const r = S.routines.find((x) => x.id === rid);
-      if (r) swapSheet({ kind: 'rocc', rid, d, status: (r.st && r.st[d]) || 'progress' });
+      if (r) swapSheet({ kind: 'rocc', rid, d, status: (r.st && r.st[d]) || 'progress', at: (r.mv && r.mv[d]) || d });
       return;
     }
     const it = findItem(id);
@@ -1555,6 +1556,9 @@ const ACT = {
     const sh = S.sheet, r = clone(S.routines.find((x) => x.id === sh.rid));
     r.st = r.st || {};
     if (sh.status === 'progress') delete r.st[sh.d]; else r.st[sh.d] = sh.status;
+    r.mv = r.mv || {};
+    if (sh.status !== 'progress' && sh.at && sh.at !== sh.d) r.mv[sh.d] = sh.at; else delete r.mv[sh.d];
+    if (!Object.keys(r.mv).length) delete r.mv;
     save('routines', r); closeSheet();
   },
 

@@ -79,9 +79,14 @@ export function nextOcc(rt, today) {
 export function occItems(routines, from, to) {
   const out = [];
   for (const rt of routines) {
-    for (const d of occDates(rt, from, to)) {
+    // mv: 이번 회차만 실제로 끝낸 날로 옮긴 기록 { 예정일: 완료한 날 }
+    const mv = rt.mv || {};
+    const hasMv = Object.keys(mv).length > 0;
+    for (const d of occDates(rt, hasMv ? addDays(from, -62) : from, hasMv ? addDays(to, 62) : to)) {
+      const shown = mv[d] || d;
+      if (shown < from || shown > to) continue;
       out.push({
-        id: `r~${rt.id}~${d}`, routine: rt.id, type: rt.kind || 'event', title: rt.title, start: d, end: d,
+        id: `r~${rt.id}~${d}`, routine: rt.id, type: rt.kind || 'event', title: rt.title, start: shown, end: shown, sched: d,
         cat: rt.cat, sub: rt.sub, memo: rt.memo || '', status: (rt.st && rt.st[d]) || 'progress', created: rt.created || 0,
       });
     }

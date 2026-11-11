@@ -120,8 +120,15 @@ class Model(data: JSONObject?) {
             val o = routines.getJSONObject(i)
             val kind = o.optString("kind", "event")
             val stMap = o.optJSONObject("st")
-            for (d in occDates(o, from, to)) {
-                out.add(Ev("r~" + o.optString("id") + "~" + d, kind, o.optString("title"), d, d,
+            // mv: 이번 회차만 실제로 끝낸 날로 옮긴 기록 { 예정일: 완료한 날 }
+            val mv = o.optJSONObject("mv")
+            val hasMv = mv != null && mv.length() > 0
+            val f2 = if (hasMv) from.minusDays(62) else from
+            val t2 = if (hasMv) to.plusDays(62) else to
+            for (d in occDates(o, f2, t2)) {
+                val shown = mv?.optString(d.toString(), "")?.let { s -> if (s.isEmpty()) null else try { LocalDate.parse(s) } catch (e: Exception) { null } } ?: d
+                if (shown.isBefore(from) || shown.isAfter(to)) continue
+                out.add(Ev("r~" + o.optString("id") + "~" + d, kind, o.optString("title"), shown, shown,
                     colorOf(kind, o.optString("cat"), o.optString("sub")),
                     stMap?.optString(d.toString(), "progress")?.ifEmpty { "progress" } ?: "progress", true, o.optLong("created", 0)))
             }

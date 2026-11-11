@@ -46,7 +46,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid #A9C7F2;outline-offset
 .phone{height:100%;display:flex;flex-direction:column}
 .phone .page{flex:1;min-height:0;overflow-y:auto;position:relative}
 .nav{height:64px;flex:none;border-top:1px solid #111;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));align-items:center;text-align:center;font-size:12px;padding-bottom:env(safe-area-inset-bottom);background:#fff}
-.nav button{height:48px;color:#8A8A8A}
+.nav button{height:56px;color:#9A9A9A;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px}
+.nav button .ni{width:21px;height:21px}
 .nav button.on{color:#111;font-weight:700}
 .nav button:disabled{color:#CFCFCF}
 .fab{position:fixed;right:16px;bottom:calc(80px + env(safe-area-inset-bottom));width:54px;height:54px;background:#111;color:#fff;display:flex;align-items:center;justify-content:center;z-index:20}
@@ -57,7 +58,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid #A9C7F2;outline-offset
 .side{width:220px;flex:none;border-right:1px solid #111;padding:24px 14px;display:flex;flex-direction:column;gap:2px}
 .side .add{height:46px;background:#111;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:18px;font-size:14px}
 .side .add svg{width:18px;height:18px}
-.side .mi{text-align:left;font-size:15px;color:#6B6B6B;padding:10px 12px;border-left:2px solid transparent}
+.side .mi{text-align:left;font-size:15px;color:#9A9A9A;padding:10px 12px;border-left:2px solid transparent;display:flex;align-items:center;gap:10px}
+.side .mi .ni{width:19px;height:19px;flex:none}
 .side .mi.on{color:#111;font-weight:700;border-left-color:#111}
 .side .mi:disabled{color:#CFCFCF}
 .side .grow{flex:1}
@@ -233,7 +235,7 @@ input[type=date]{min-width:0;padding:0 8px}
 .wide .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:12px;align-items:start}.wide .cards .card{margin:0}
 .ygrid{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 
-.mi.sync{display:flex;align-items:center;gap:8px}.mi.sync svg{width:18px;height:18px}.mi.sync small{margin-left:auto;color:#9A9A9A;font-size:12px}
+.mi.sync{display:flex;align-items:center;gap:10px}.mi.sync svg{width:19px;height:19px}.mi.sync small{margin-left:auto;color:#9A9A9A;font-size:12px}
 @keyframes pbspin{to{transform:rotate(360deg)}}
 .spin svg{animation:pbspin .9s linear infinite}
 .ck{width:100%;border-collapse:collapse;font-size:14px;margin-top:14px}

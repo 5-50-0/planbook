@@ -157,7 +157,7 @@ input[type=date]{min-width:0;padding:0 8px}
 .pal button.on{outline:2.5px solid #111;outline-offset:2px}
 .hexrow{display:flex;gap:8px;align-items:center}
 .hexrow input[type=color]{width:46px;height:46px;padding:2px;flex:none}
-.subrow{display:grid;grid-template-columns:1fr 120px 46px 36px;gap:6px;align-items:center;margin-bottom:6px}
+.subrow{display:grid;grid-template-columns:22px minmax(0,1fr) 110px 44px 30px;gap:6px;align-items:center;margin-bottom:6px}
 .subrow select,.subrow input{height:40px;font-size:14px}
 .subrow input[type=color]{padding:2px}
 .subrow .rm{height:40px;color:#A32D2D}
@@ -316,3 +316,16 @@ table.sal tr.co td{background:#F4F4F4;font-weight:500;font-size:12px;color:#111;
 .kp button:active{background:#F4F4F4}
 .lk2{display:block;margin:16px auto 0;font-size:13px;color:#6B6B6B;text-decoration:underline}
 .lk2.red{color:#A32D2D}
+.month .chip.other{color:#9A9A9A!important}
+
+/* 순서 바꾸기 */
+.grip{display:flex;align-items:center;justify-content:center;width:22px;height:40px;color:#9A9A9A;touch-action:none;cursor:grab;flex:none}
+.grip svg{width:18px;height:18px}
+.srow{display:flex;align-items:center;gap:4px}
+.srow .row{flex:1;min-width:0}
+.sitem{background:#fff;position:relative}
+.sitem.lift{z-index:5;box-shadow:0 6px 18px rgba(0,0,0,.22);transition:none}
+[data-sort] .sitem:not(.lift){transition:transform .15s}
+.sorthd{display:flex;justify-content:space-between;align-items:center;margin:12px 0 2px;font-size:13px;color:#6B6B6B}
+.sorthd button{font-size:12px;border:1px solid #111;padding:2px 8px;color:#111}
+.sorthd.lb{margin:16px 0 6px}

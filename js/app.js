@@ -7,7 +7,7 @@ import {
 import { occItems, occDates, nextOcc, ruleText, lunarToSolar } from './routine.js';
 import { writeXlsx, buildIcs, downloadBlob, stampName } from './export.js';
 
-export const APP_VERSION = '1.4.0';
+export const APP_VERSION = '1.4.1';
 
 const NI = {
   month: '<rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M8 2.5v4M16 2.5v4"/><circle cx="8" cy="14" r=".6"/><circle cx="12" cy="14" r=".6"/><circle cx="16" cy="14" r=".6"/><circle cx="8" cy="17.3" r=".6"/><circle cx="12" cy="17.3" r=".6"/>',
@@ -20,6 +20,7 @@ const NI = {
 };
 const nIc = (k) => `<svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${NI[k]}</svg>`;
 const IC = {
+  grip: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>',
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>',
   unlock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 7.6-1.7"/></svg>',
   dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>',
@@ -170,13 +171,27 @@ function monthBody() {
     });
     segs.filter((s) => s.lane < maxL).forEach((s) => {
       const c = colorOf(s.item);
-      h += `<button class="chip" style="grid-column:${s.col + 1}/span ${s.span};grid-row:${s.lane + 2};background:${c};color:${textOn(c)}" data-act="open" data-id="${s.item.id}">${esc(s.item.title || '(제목 없음)')}</button>`;
+      // 이번 달이 아닌 날에 걸친 부분은 옅게
+      const inM = days.slice(s.col, s.col + s.span).map((d) => parse(d).getMonth() === m);
+      const nIn = inM.filter(Boolean).length;
+      let bg = c, cls = 'chip';
+      if (!nIn) { bg = fadeHex(c); cls += ' other'; }
+      else if (nIn < s.span) {
+        const f = fadeHex(c), lead = inM.indexOf(true), tail = s.span - 1 - inM.lastIndexOf(true);
+        const p1 = (lead / s.span) * 100, p2 = 100 - (tail / s.span) * 100;
+        bg = `linear-gradient(to right,${f} 0 ${p1}%,${c} ${p1}% ${p2}%,${f} ${p2}% 100%)`;
+      }
+      h += `<button class="${cls}" style="grid-column:${s.col + 1}/span ${s.span};grid-row:${s.lane + 2};background:${bg};color:${textOn(c)}" data-act="open" data-id="${s.item.id}">${esc(s.item.title || '(제목 없음)')}</button>`;
     });
     h += '</div>';
   }
   return `<div class="month">${h}</div>`;
 }
 
+function fadeHex(hex) {
+  const n = parseInt(hex.slice(1), 16), mix = (v) => Math.round(v + (255 - v) * 0.62);
+  return `rgb(${mix(n >> 16)},${mix((n >> 8) & 255)},${mix(n & 255)})`;
+}
 function cardHtml(it) {
   const c = colorOf(it);
   const memo = it.memo ? `<div class="cm">${esc(it.memo)}</div>` : '';
@@ -339,18 +354,23 @@ function settingsBody() {
   h += `<button class="acc" data-act="acc" data-v="cats"><span>분류와 색</span><span>${A.cats ? '−' : '+'}</span></button>`;
   if (A.cats) {
     h += `<button class="row hl" data-act="defCat"><b>기본 분류</b><span class="vl">${esc(catLabel({ cat: st.defCat, sub: st.defSub }) || '없음')}</span></button>`;
+    h += `<div class="sorthd"><span>분류</span><button data-act="sortAbc" data-v="cats">가나다순</button></div><div data-sort="cats">`;
     st.cats.forEach((c) => {
-      h += `<button class="row" data-act="catEdit" data-id="${c.id}"><span class="sw" style="background:${c.color}"></span>${esc(c.name)}<span class="vl">세분류 ${(c.subs || []).length}</span></button>`;
+      h += `<div class="sitem"><div class="srow"><span class="grip" aria-label="순서 바꾸기">${IC.grip}</span><button class="row" data-act="catEdit" data-id="${c.id}"><span class="sw" style="background:${c.color}"></span>${esc(c.name)}<span class="vl">세분류 ${(c.subs || []).length}</span></button></div>`;
       (c.subs || []).forEach((s) => {
         h += `<button class="row sub" data-act="catEdit" data-id="${c.id}"><span class="sw" style="background:${s.color || c.color}"></span>${esc(s.name)}<span class="vl">${s.color ? '직접 지정' : '대분류 색'}</span></button>`;
       });
+      h += '</div>';
     });
+    h += '</div>';
     h += `<button class="row" data-act="todoColor"><span class="sw" style="background:${st.todoColor}"></span>할 일</button>`;
     h += `<button class="row" data-act="catNew" style="font-size:14px">${small(IC.plus)}분류 추가</button>`;
   }
   h += `<button class="acc" data-act="acc" data-v="topics"><span>이어북 주제 색</span><span>${A.topics ? '−' : '+'}</span></button>`;
   if (A.topics) {
-    (st.topics || []).forEach((t) => { h += `<button class="row" data-act="topicEdit" data-id="${t.id}"><span class="sw" style="background:${t.color}"></span>${esc(t.name)}</button>`; });
+    h += `<div class="sorthd"><span>주제</span><button data-act="sortAbc" data-v="topics">가나다순</button></div><div data-sort="topics">`;
+    (st.topics || []).forEach((t) => { h += `<div class="sitem"><div class="srow"><span class="grip" aria-label="순서 바꾸기">${IC.grip}</span><button class="row" data-act="topicEdit" data-id="${t.id}"><span class="sw" style="background:${t.color}"></span>${esc(t.name)}</button></div></div>`; });
+    h += '</div>';
     h += `<button class="row" data-act="topicNew" style="font-size:14px">${small(IC.plus)}주제 추가</button>`;
   }
   h += `<button class="acc" data-act="acc" data-v="data"><span>데이터</span><span>${A.data ? '−' : '+'}</span></button>`;
@@ -412,7 +432,8 @@ function editHtml() {
   const topics = S.settings.topics || [];
   let h = bandIn(c, it.title);
   if (sh.isNew) h += `<div style="margin-top:12px">${seg([['event', '일정'], ['todo', '할 일']], it.type, 'setType')}</div>`;
-  if (isTodo && !sh.isNew) h += `<span class="lb">상태</span>${seg([['progress', '진행'], ['done', '완료'], ['cancel', '취소']], st, 'status')}`;
+  if (isTodo) h += `<span class="lb">상태</span>${seg([['progress', '진행'], ['done', '완료'], ['cancel', '취소']], st, 'status')}`;
+  if (isTodo && sh.doneAt) h += `<span class="lb">${st === 'cancel' ? '취소한 날' : '완료한 날'}</span>${seg([['reg', `등록일자 ${md2(sh.regDate)}`], ['today', `오늘 ${md2(todayStr())}`]], sh.doneAt, 'doneAt')}`;
   h += isTodo ? field('날짜', 'start', it.start, 'date')
     : `<div class="two"><div>${field('시작', 'start', it.start, 'date')}</div><div>${field('종료', 'end', it.end || it.start, 'date')}</div></div>`;
   if (isTodo && isCarried(it, todayStr())) h += `<p class="muted" style="font-size:13px;margin:8px 0 0">원래 날짜 ${fmtMD(it.start)}</p>`;
@@ -500,14 +521,14 @@ function catHtml() {
   h += `<span class="lb">색</span><div class="pal">${PALETTE.map((p) => `<button style="background:${p}" class="${p.toUpperCase() === (col || '').toUpperCase() ? 'on' : ''}" aria-label="${p}" data-act="pick" data-v="${p}"></button>`).join('')}</div>
     <label class="lb" for="c_hex">직접 지정</label><div class="hexrow"><input type="color" aria-label="색 고르기" data-pick="1" value="${col}"><input id="c_hex" data-f="hex" value="${col}"></div>`;
   if (sh.kind === 'cat' && !sh.todo) {
-    h += '<span class="lb">세분류</span>';
+    h += '<div class="sorthd lb"><span>세분류</span><button data-act="sortAbc" data-v="subs">가나다순</button></div><div data-sort="subs">';
     d.subs.forEach((s, i) => {
-      h += `<div class="subrow"><input aria-label="세분류 이름" data-sf="name" data-i="${i}" value="${esc(s.name)}">
+      h += `<div class="subrow sitem"><span class="grip" aria-label="순서 바꾸기">${IC.grip}</span><input aria-label="세분류 이름" data-sf="name" data-i="${i}" value="${esc(s.name)}">
         <select aria-label="세분류 색" data-sf="mode" data-i="${i}"><option value="inherit" ${s.color ? '' : 'selected'}>대분류 색</option><option value="own" ${s.color ? 'selected' : ''}>직접 지정</option></select>
         <input type="color" aria-label="세분류 색 고르기" data-sf="color" data-i="${i}" value="${s.color || col}" ${s.color ? '' : 'disabled'}>
         <button class="rm" aria-label="세분류 삭제" data-act="subDel" data-i="${i}">${small(IC.x, 18)}</button></div>`;
     });
-    h += '<button class="btn sm" data-act="subAdd">세분류 추가</button>';
+    h += '</div><button class="btn sm" data-act="subAdd">세분류 추가</button>';
   }
   return h + errLine(sh) + acts(sh.todo ? null : (isTopic ? 'topicDel' : 'catDel'), isTopic ? 'topicSave' : 'catSave', sh.isNew);
 }
@@ -1388,12 +1409,20 @@ const ACT = {
     const it = findItem(id);
     if (it) swapSheet({ kind: 'edit', draft: { ...it }, isNew: false });
   },
-  setType: (el) => { const d = S.sheet.draft; d.type = el.dataset.v; if (d.type === 'event') d.end = d.end && d.end >= d.start ? d.end : d.start; render(); },
+  setType: (el) => { const sh = S.sheet, d = sh.draft; d.type = el.dataset.v; if (d.type === 'event') d.end = d.end && d.end >= d.start ? d.end : d.start; if (d.type === 'todo' && sh.isNew && !sh.stManual) d.status = d.start < todayStr() ? 'done' : 'progress'; render(); },
   close: () => closeSheet(),
   status: (el) => {
-    const it = S.sheet.draft, today = todayStr(), v = el.dataset.v;
-    if (v !== 'progress' && (it.status || 'progress') === 'progress' && it.start < today) { it.origStart = it.start; it.start = today; }
+    const sh = S.sheet, it = sh.draft, today = todayStr(), v = el.dataset.v;
+    if (sh.isNew) { sh.stManual = true; it.status = v; render(); return; }
+    // 지난 할 일을 완료·취소할 때: 등록일자에 남길지, 오늘로 옮길지 고름 (기본: 등록일자)
+    if (!sh.doneAt && v !== 'progress' && (it.status || 'progress') === 'progress' && it.start < today) { sh.doneAt = 'reg'; sh.regDate = it.start; }
+    if (v === 'progress' && sh.doneAt) { if (sh.doneAt === 'today') { it.start = sh.regDate; delete it.origStart; } sh.doneAt = null; }
     it.status = v; render();
+  },
+  doneAt: (el) => {
+    const sh = S.sheet, it = sh.draft, v = el.dataset.v;
+    if (v === 'today') { it.origStart = sh.regDate; it.start = todayStr(); } else { it.start = sh.regDate; delete it.origStart; }
+    sh.doneAt = v; render();
   },
   ybSwitch: () => {
     const it = S.sheet.draft;
@@ -1589,7 +1618,65 @@ const ACT = {
   logout: () => { D.logout(); },
 };
 
-Object.assign(ACT, PJ_ACT, SAL_ACT);
+// ---------- 순서 바꾸기 ----------
+const abc = (a, b) => (a.name || '').localeCompare(b.name || '', 'ko', { numeric: true, sensitivity: 'base' });
+function moveIn(arr, from, to) { const a = arr.slice(); const [x] = a.splice(from, 1); a.splice(to, 0, x); return a; }
+function applyOrder(kind, fn) {
+  if (kind === 'subs') { const d = S.sheet && S.sheet.draft; if (d) { d.subs = fn(d.subs); render(); } return; }
+  const st = clone(S.settings);
+  st[kind] = fn(st[kind] || []);
+  saveSettings(st); render();
+}
+const SORT_ACT = { sortAbc: (el) => applyOrder(el.dataset.v, (a) => a.slice().sort(abc)) };
+let DRAG = null;
+$app.addEventListener('pointerdown', (e) => {
+  const g = e.target.closest && e.target.closest('.grip');
+  if (!g) return;
+  const list = g.closest('[data-sort]'), item = g.closest('.sitem');
+  if (!list || !item) return;
+  e.preventDefault();
+  const items = [...list.children].filter((x) => x.classList.contains('sitem'));
+  const rects = items.map((x) => x.getBoundingClientRect());
+  const from = items.indexOf(item);
+  DRAG = { list, item, items, rects, from, to: from, y0: e.clientY, kind: list.dataset.sort };
+  try { g.setPointerCapture(e.pointerId); } catch (err) {}
+  item.classList.add('lift');
+  if (navigator.vibrate) navigator.vibrate(10);
+});
+$app.addEventListener('pointermove', (e) => {
+  if (!DRAG) return;
+  e.preventDefault();
+  const { item, items, rects, from } = DRAG;
+  const dy = e.clientY - DRAG.y0;
+  item.style.transform = `translateY(${dy}px)`;
+  const mid = rects[from].top + rects[from].height / 2 + dy;
+  let to = from;
+  for (let i = 0; i < rects.length; i++) {
+    const c = rects[i].top + rects[i].height / 2;
+    if (i < from && mid < c) { to = i; break; }
+    if (i > from && mid > c) to = i;
+  }
+  DRAG.to = to;
+  const h = rects[from].height + (rects[1] ? Math.max(0, rects[1].top - rects[0].bottom) : 0);
+  items.forEach((x, i) => {
+    if (x === item) return;
+    let off = 0;
+    if (from < to && i > from && i <= to) off = -h;
+    if (from > to && i >= to && i < from) off = h;
+    x.style.transform = off ? `translateY(${off}px)` : '';
+  });
+});
+const dragEnd = () => {
+  if (!DRAG) return;
+  const { from, to, kind, items } = DRAG;
+  items.forEach((x) => { x.style.transform = ''; x.classList.remove('lift'); });
+  DRAG = null;
+  if (from !== to) applyOrder(kind, (a) => moveIn(a, from, to));
+};
+$app.addEventListener('pointerup', dragEnd);
+$app.addEventListener('pointercancel', dragEnd);
+
+Object.assign(ACT, PJ_ACT, SAL_ACT, SORT_ACT);
 
 // ---------- 입력 ----------
 $app.addEventListener('click', (e) => {
@@ -1622,6 +1709,7 @@ function setField(el, live) {
   if (live) return false;
   if (f === 'cat') d.sub = '';
   if (f === 'start' && d.type === 'event' && (d.end || '') < el.value) d.end = el.value;
+  if (f === 'start' && d.type === 'todo' && sh.kind === 'edit' && sh.isNew && !sh.stManual) { d.status = el.value < todayStr() ? 'done' : 'progress'; return true; }
   return el.tagName === 'SELECT' || (el.type === 'date' && sh.kind === 'edit');
 }
 $app.addEventListener('input', (e) => {

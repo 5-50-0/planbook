@@ -95,10 +95,9 @@ object Fetch {
         val tok = idToken(ctx) ?: return false
         val items = listCol(uid, "items", tok)
         val routines = listCol(uid, "routines", tok)
-        val settings = try {
-            val d = JSONObject(http("GET", base(uid) + "/meta/settings", auth = tok))
-            fields(d.optJSONObject("fields"))
-        } catch (e: Exception) { JSONObject() }
+        // 설정을 못 받으면 저장해 둔 것을 지우지 않고 실패로 끝냄
+        val d = JSONObject(http("GET", base(uid) + "/meta/settings", auth = tok))
+        val settings = fields(d.optJSONObject("fields"))
         val data = JSONObject()
         data.put("items", items)
         data.put("routines", routines)

@@ -51,6 +51,23 @@ object Render {
         cv.drawText(t, 0, n, x, y, paint)
     }
 
+    // 동기화 아이콘 (웹과 같은 모양). (x, y) = 왼쪽 위, size = 한 변
+    fun syncIcon(cv: Canvas, x: Float, y: Float, size: Float, color: Int) {
+        val s = size / 24f
+        val pt = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color; style = Paint.Style.STROKE; strokeWidth = 1.7f * s
+            strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
+        }
+        val oval = RectF(x + 4 * s, y + 4 * s, x + 20 * s, y + 20 * s)
+        cv.drawArc(oval, 0f, 142f, false, pt)
+        cv.drawArc(oval, 180f, 142f, false, pt)
+        val a = Path().apply {
+            moveTo(x + 18.5f * s, y + 3 * s); lineTo(x + 18.5f * s, y + 7.3f * s); lineTo(x + 14.2f * s, y + 7.3f * s)
+            moveTo(x + 5.5f * s, y + 21 * s); lineTo(x + 5.5f * s, y + 16.7f * s); lineTo(x + 9.8f * s, y + 16.7f * s)
+        }
+        cv.drawPath(a, pt)
+    }
+
     fun message(w: Int, h: Int, dp: Float, msg: String): Bitmap {
         val (bmp, cv) = base(w, h, dp)
         val pt = p(MUTED, 13 * dp)
@@ -86,6 +103,8 @@ object Render {
             cv.drawText(WD[i], pad + colW * i + 3 * dp, headH - 3 * dp, wdp)
         }
         cv.drawRect(pad, headH, w - pad, headH + 1.5f * dp, p(INK, 0f))
+        val ic = minOf(18 * dp, headH * 0.42f)
+        syncIcon(cv, w - pad - ic - 2 * dp, 8 * dp, ic, INK)
 
         val numSize = minOf(11 * dp, rowH * 0.28f)
         val dateH = numSize + 5 * dp
@@ -159,7 +178,9 @@ object Render {
         val hp = p(dayColor(today).let { if (it == INK) INK else it }, 14 * dp, medium())
         cv.drawText(title, pad, pad + 14 * dp, hp)
         val brand = p(MUTED, 10 * dp)
-        cv.drawText("플랜북", w - pad - brand.measureText("플랜북"), pad + 13 * dp, brand)
+        val ic = 18 * dp
+        syncIcon(cv, w - pad - ic + 2 * dp, pad - 1 * dp, ic, INK)
+        cv.drawText("플랜북", w - pad - ic - 4 * dp - brand.measureText("플랜북"), pad + 13 * dp, brand)
         val hol = Holidays.MAP[today.toString()]
         if (hol != null) cv.drawText(hol, pad + hp.measureText(title) + 6 * dp, pad + 13 * dp, p(RED, 10 * dp))
 

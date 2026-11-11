@@ -15,6 +15,9 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.workDataOf
+import android.content.BroadcastReceiver
+import android.widget.Toast
 import java.util.concurrent.TimeUnit
 
 object Widgets {
@@ -25,6 +28,11 @@ object Widgets {
             putExtra("date", date); putExtra("view", view)
         }
         return PendingIntent.getActivity(ctx, code, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+
+    private fun syncIntent(ctx: Context): PendingIntent {
+        val i = Intent(ctx, SyncReceiver::class.java).apply { action = "kr.planbook.SYNC" }
+        return PendingIntent.getBroadcast(ctx, 7, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
     // 위젯 크기 (px)
@@ -53,6 +61,7 @@ object Widgets {
             else Render.month(m, w, h, dp, today)
         rv.setImageViewBitmap(R.id.img, bmp)
         rv.setOnClickPendingIntent(R.id.head, openIntent(ctx, null, "month", 1000 + id % 1000))
+        rv.setOnClickPendingIntent(R.id.sync, syncIntent(ctx))
         val grid = Model.monthGrid(today.year, today.monthValue)
         val ids = arrayOf(
             intArrayOf(R.id.c00, R.id.c01, R.id.c02, R.id.c03, R.id.c04, R.id.c05, R.id.c06),
@@ -82,6 +91,7 @@ object Widgets {
             else Render.today(m, w, h, dp, today)
         rv.setImageViewBitmap(R.id.img, bmp)
         rv.setOnClickPendingIntent(R.id.root, openIntent(ctx, today.toString(), "week", 9000 + id % 1000))
+        rv.setOnClickPendingIntent(R.id.sync, syncIntent(ctx))
         mgr.updateAppWidget(id, rv)
     }
 
@@ -93,9 +103,11 @@ object Widgets {
 
     private val net = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
-    fun syncNow(ctx: Context) {
-        WorkManager.getInstance(ctx).enqueueUniqueWork("pb-now", ExistingWorkPolicy.REPLACE,
-            OneTimeWorkRequestBuilder<SyncWorker>().setConstraints(net).build())
+    fun syncNow(ctx: Context, manual: Boolean = false) {
+        val req = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setInputData(workDataOf("manual" to manual))
+        if (!manual) req.setConstraints(net)
+        WorkManager.getInstance(ctx).enqueueUniqueWork("pb-now", ExistingWorkPolicy.REPLACE, req.build())
     }
 
     fun schedule(ctx: Context) {
@@ -121,5 +133,16 @@ class TodayWidget : AppWidgetProvider() {
     }
     override fun onAppWidgetOptionsChanged(ctx: Context, mgr: AppWidgetManager, id: Int, newOptions: Bundle) {
         Widgets.updateToday(ctx, mgr, id)
+    }
+}
+
+// 위젯의 동기화 버튼
+class SyncReceiver : BroadcastReceiver() {
+    override fun onReceive(ctx: Context, intent: Intent) {
+        if (Store.uid(ctx) == null) {
+            Toast.makeText(ctx, "플랜북 앱에서 로그인해 주세요", Toast.LENGTH_SHORT).show(); return
+        }
+        Toast.makeText(ctx, "동기화하는 중", Toast.LENGTH_SHORT).show()
+        Widgets.syncNow(ctx, manual = true)
     }
 }

@@ -7,9 +7,10 @@ import {
 import { occItems, occDates, nextOcc, ruleText, lunarToSolar } from './routine.js';
 import { writeXlsx, buildIcs, downloadBlob, stampName } from './export.js';
 
-export const APP_VERSION = '1.2.1';
+export const APP_VERSION = '1.2.2';
 
 const IC = {
+  sync: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 12a8 8 0 0 1-14.3 4.9M4 12A8 8 0 0 1 18.3 7.1"/><path d="M18.5 3v4.3h-4.3M5.5 21v-4.3h4.3"/></svg>',
   l: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M15 6l-6 6 6 6"/></svg>',
   r: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>',
   set: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg>',
@@ -119,7 +120,7 @@ function headTools(prev, next, opt = {}) {
     ? `<button class="ico bd" aria-label="이전" data-act="${prev}">${IC.l}</button>${opt.today === false ? '' : '<button class="today" data-act="goToday">오늘</button>'}<button class="ico bd" aria-label="다음" data-act="${next}">${IC.r}</button>`
     : `<button class="ico" aria-label="이전" data-act="${prev}">${IC.l}</button>${opt.today === false ? '' : '<button class="today" data-act="goToday">오늘</button>'}<button class="ico" aria-label="다음" data-act="${next}">${IC.r}</button>`) : '';
   const extra = (opt.extra || '') + (opt.plus ? PLUS(opt.plus) : '');
-  const set = W ? '' : `<button class="ico" aria-label="설정" data-act="nav" data-v="settings">${IC.set}</button>`;
+  const set = W ? '' : `<button class="ico ${S.syncing ? 'spin' : ''}" aria-label="동기화" data-act="sync">${IC.sync}</button><button class="ico" aria-label="설정" data-act="nav" data-v="settings">${IC.set}</button>`;
   return `<div class="tools">${nav}${extra}${set}</div>`;
 }
 const PLUS = (a='fab') => `<button class="ico plus" aria-label="추가" data-act="${a}">${IC.plus}</button>`;
@@ -340,6 +341,8 @@ function settingsBody() {
   }
   h += `<button class="acc" data-act="acc" data-v="data"><span>데이터</span><span>${A.data ? '−' : '+'}</span></button>`;
   if (A.data) {
+    const CKS = { ok: ['일치', '#2E7D4F'], less: ['확인 필요', '#A32D2D'], none: ['백업 없음', '#6B6B6B'] }[S.ckStatus] || ['', ''];
+    h += `<button class="row hl" data-act="ckOpen"><b>데이터 점검</b><span class="vl" style="color:${CKS[1]}">${CKS[0]}</span></button>`;
     h += `<button class="row" data-act="xlsxOpen">엑셀로 내보내기<span class="vl">.xlsx</span></button>
       <button class="row" data-act="icsOpen">구글 캘린더용 내보내기<span class="vl">.ics</span></button>
       <button class="row" data-act="exportJson">백업 파일 받기<span class="vl">.json</span></button>
@@ -376,7 +379,7 @@ function sheetHtml() {
   const F = {
     day: () => `${band('#111111', `${fmtMD(sh.d)}${HOLIDAYS[sh.d] ? ' · ' + HOLIDAYS[sh.d] : ''}`)}<div style="margin-top:12px">${dayList(sh.d)}</div><button class="btn pri" style="width:100%;margin-top:8px" data-act="newOn" data-d="${sh.d}">추가</button>`,
     edit: editHtml, cat: catHtml, topic: catHtml, note: noteHtml, rec: recHtml, rt: rtHtml, rocc: roccHtml, defcat: defCatHtml,
-    backups: backupsHtml,
+    backups: backupsHtml, check: checkHtml, impPrev: impPrevHtml, impRes: impResHtml,
     xlsx: () => `${band('#111111', '엑셀로 내보내기')}<div class="two">${'<div>' + field('시작', 'from', sh.from, 'date') + '</div><div>' + field('끝', 'to', sh.to, 'date') + '</div>'}</div>${errLine(sh)}<div class="acts"><button class="btn pri" data-act="xlsxGo">내보내기</button></div>`,
     ics: () => `${band('#111111', '구글 캘린더용 내보내기')}<label class="check"><input type="checkbox" data-f="todos" ${sh.todos ? 'checked' : ''}> 할 일도 종일 일정으로 넣기</label>${errLine(sh)}<div class="acts"><button class="btn pri" data-act="icsGo">내보내기</button></div>`,
   };
@@ -500,8 +503,8 @@ function backupsHtml() {
     const t = new Date(b.at);
     const when = `${t.getFullYear()}.${t.getMonth() + 1}.${t.getDate()} ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
     const armed = sh.arm === b.id;
-    return `<div class="row"><div><div>${when}</div><div class="muted" style="font-size:12px">${esc(b.reason || '')} · ${(b.items || []).length}건</div></div>
-      <button class="btn sm ${armed ? 'del' : ''}" style="margin-left:auto" data-act="restoreBk" data-id="${b.id}">${armed ? '정말 복원' : '복원'}</button></div>`;
+    return `<div class="row"><div><div>${when}</div><div class="muted" style="font-size:12px">${esc(b.reason || '')} · ${b.counts ? b.counts.ev + b.counts.td : (b.items || []).length}건</div></div>
+      <button class="btn sm" style="margin-left:auto" data-act="restoreBk" data-id="${b.id}">복원</button></div>`;
   }).join('');
 }
 
@@ -522,7 +525,7 @@ function render() {
   if (wide()) {
     const mi = (v, l) => `<button class="mi ${navV === v ? 'on' : ''}" data-act="nav" data-v="${v}">${l}</button>`;
     const right = V === 'month' ? `<aside class="rpanel"><p class="dt ${dayClass(S.sel)}">${fmtMD(S.sel)}${HOLIDAYS[S.sel] ? ' · ' + HOLIDAYS[S.sel] : ''}</p><p class="dn">${parse(S.sel).getDate()}</p>${dayList(S.sel)}<button class="btn sm" style="margin-top:6px" data-act="newOn" data-d="${S.sel}">추가</button></aside>` : '';
-    html = `<div class="wide"><nav class="side">${mi('month', '먼슬리')}${mi('week', '위클리')}${mi('mini', '미니북')}${mi('year', '이어북')}${mi('routine', '루틴북')}<div class="grow"></div><button class="mi set ${V === 'settings' ? 'on' : ''}" data-act="nav" data-v="settings">설정</button></nav><main class="main">${page}</main>${right}${sheetHtml()}</div>`;
+    html = `<div class="wide"><nav class="side">${mi('month', '먼슬리')}${mi('week', '위클리')}${mi('mini', '미니북')}${mi('year', '이어북')}${mi('routine', '루틴북')}<div class="grow"></div><button class="mi sync ${S.syncing ? 'spin' : ''}" data-act="sync">${IC.sync}<span>동기화</span><small>${S.syncAt ? fmtAt(S.syncAt).slice(11) : ''}</small></button><button class="mi set ${V === 'settings' ? 'on' : ''}" data-act="nav" data-v="settings">설정</button></nav><main class="main">${page}</main>${right}${sheetHtml()}</div>`;
   } else {
     const tab = (v, l) => `<button class="${navV === v ? 'on' : ''}" data-act="nav" data-v="${v}">${l}</button>`;
     const showFab = ['month', 'week'].includes(V);
@@ -572,19 +575,218 @@ async function ensureSettingsAndBackup() {
   if (st.backupVer !== APP_VERSION) {
     const has = D.COLS.some((c) => S[c].length);
     if (has) {
-      try { await D.backupNow(U(), snapshot(), `${APP_VERSION} 업데이트 전 자동 백업`, APP_VERSION); } catch (e) { console.warn(e); return; }
+      try { await backupCurrent(`${APP_VERSION} 업데이트 전 자동 백업`); } catch (e) { console.warn(e); toast('자동 백업을 하지 못했어요. 인터넷 연결 후 다시 열어 주세요'); return; }
     }
     S.settings = { ...st, backupVer: APP_VERSION };
     D.saveSettings(U(), S.settings);
   }
 }
-async function restore(data) {
-  try {
-    await D.backupNow(U(), snapshot(), '복원 직전 자동 백업', APP_VERSION);
-    await D.restoreAll(U(), snapshot(), data);
-    closeSheet(); toast('복원했어요');
-  } catch (e) { console.error(e); toast('복원하지 못했어요'); }
+// ---------- 데이터 점검 · 합치기 복원 ----------
+const CK = [['ev', '일정'], ['td', '할 일'], ['mt', '회의'], ['mm', '메모'], ['rc', '기록'], ['rt', '루틴'], ['yb', '이어북 칠한 날'], ['ct', '분류 · 주제']];
+const ckKey = (name, o) => name === 'items' ? (o.type === 'todo' ? 'td' : 'ev') : name === 'notes' ? (o.kind === 'meeting' ? 'mt' : 'mm') : name === 'records' ? 'rc' : 'rt';
+const zeroC = () => Object.fromEntries(CK.map(([k]) => [k, 0]));
+function countsOf(d) {
+  const c = zeroC();
+  ['items', 'notes', 'records', 'routines'].forEach((n) => (d[n] || []).forEach((o) => { c[ckKey(n, o)]++; }));
+  (d.yb || []).forEach((y) => { c.yb += (y.days || []).length; });
+  const st = d.settings || {};
+  c.ct = (st.cats || []).length + (st.topics || []).length;
+  return c;
 }
+// 어떤 버전의 백업이든 같은 모양으로 맞춤 (빠뜨리는 항목 없이)
+function normalizeData(raw) {
+  if (!raw || typeof raw !== 'object') throw new Error('형식');
+  const has = D.COLS.some((n) => Array.isArray(raw[n]));
+  if (!has) throw new Error('형식');
+  const out = {};
+  D.COLS.forEach((n) => {
+    out[n] = (Array.isArray(raw[n]) ? raw[n] : []).filter((o) => o && typeof o === 'object').map((o) => {
+      const x = { ...o };
+      x.id = x.id != null && String(x.id) !== '' ? String(x.id) : (n === 'yb' && x.topic && x.year ? `${x.topic}_${x.year}` : uid());
+      if (n === 'yb') x.days = Array.isArray(x.days) ? x.days.filter((d) => typeof d === 'string') : [];
+      return x;
+    });
+  });
+  out.settings = raw.settings && typeof raw.settings === 'object' ? raw.settings : null;
+  return out;
+}
+const RK = { salary: '연봉', cert: '자격증', edu: '교육' };
+function labelOf(name, o) {
+  if (name === 'items') return `${(o.start || '').replace(/-/g, '.')} ${o.title || '(제목 없음)'}`;
+  if (name === 'notes') return `${(o.date || '').replace(/-/g, '.')} ${o.title || '(제목 없음)'}`;
+  if (name === 'records') return `${RK[o.kind] || '기록'} ${o.name || o.year || ''}`;
+  return `루틴 ${o.title || ''}`;
+}
+// 지금(cur)에 파일(file)을 합치는 계획. 지금 있는 것은 그대로 둠
+function planMerge(cur, file) {
+  const plan = { add: {}, yb: [], settings: null };
+  ['items', 'notes', 'records', 'routines'].forEach((n) => {
+    const ids = new Set((cur[n] || []).map((o) => o.id));
+    plan.add[n] = file[n].filter((o) => !ids.has(o.id));
+  });
+  const ybCur = new Map((cur.yb || []).map((y) => [y.id, y]));
+  plan.add.yb = [];
+  file.yb.forEach((y) => {
+    const c = ybCur.get(y.id);
+    if (!c) { plan.add.yb.push(y); return; }
+    const days = new Set(c.days || []);
+    const more = y.days.filter((d) => !days.has(d));
+    const memo = !c.memo && y.memo ? y.memo : c.memo;
+    if (more.length || memo !== c.memo) plan.yb.push({ before: c, after: { ...c, days: [...days, ...more].sort(), memo: memo || '' } });
+  });
+  if (file.settings) {
+    const before = cur.settings || {};
+    const after = clone(before);
+    after.cats = after.cats || []; after.topics = after.topics || [];
+    let changed = false;
+    (file.settings.cats || []).forEach((fc) => {
+      const c = after.cats.find((x) => x.id === fc.id);
+      if (!c) { after.cats.push(clone(fc)); changed = true; return; }
+      c.subs = c.subs || [];
+      (fc.subs || []).forEach((fs) => { if (!c.subs.some((s) => s.id === fs.id)) { c.subs.push(clone(fs)); changed = true; } });
+    });
+    (file.settings.topics || []).forEach((ft) => { if (!after.topics.some((t) => t.id === ft.id)) { after.topics.push(clone(ft)); changed = true; } });
+    Object.keys(file.settings).forEach((k) => { if (!(k in after)) { after[k] = clone(file.settings[k]); changed = true; } });
+    if (changed) plan.settings = { before, after };
+  }
+  return plan;
+}
+// 파일의 모든 항목이 지금(after)에 있는지 하나씩 확인
+function verifyMerge(file, after) {
+  const got = zeroC(), missing = [];
+  ['items', 'notes', 'records', 'routines'].forEach((n) => {
+    const ids = new Set((after[n] || []).map((o) => o.id));
+    file[n].forEach((o) => { if (ids.has(o.id)) got[ckKey(n, o)]++; else missing.push(labelOf(n, o)); });
+  });
+  const ybA = new Map((after.yb || []).map((y) => [y.id, new Set(y.days || [])]));
+  const topicName = (id) => ((after.settings || {}).topics || []).find((t) => t.id === id)?.name || '이어북';
+  file.yb.forEach((y) => {
+    const set = ybA.get(y.id) || new Set();
+    y.days.forEach((d) => { if (set.has(d)) got.yb++; else missing.push(`${topicName(y.topic)} ${d.replace(/-/g, '.')}`); });
+  });
+  const st = after.settings || {};
+  const fs = file.settings || {};
+  (fs.cats || []).forEach((c) => { if ((st.cats || []).some((x) => x.id === c.id)) got.ct++; else missing.push(`분류 ${c.name || ''}`); });
+  (fs.topics || []).forEach((t) => { if ((st.topics || []).some((x) => x.id === t.id)) got.ct++; else missing.push(`주제 ${t.name || ''}`); });
+  return { got, missing };
+}
+// 백업에는 있는데 지금은 없는 것
+function missingNow(bk, now) {
+  return verifyMerge(bk, now).missing;
+}
+const fmtAt = (ms) => { const t = new Date(ms); return `${t.getFullYear()}.${String(t.getMonth() + 1).padStart(2, '0')}.${String(t.getDate()).padStart(2, '0')} ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`; };
+async function backupCurrent(reason) {
+  const data = snapshot();
+  return D.backupNow(U(), data, reason, APP_VERSION, countsOf(data));
+}
+// 점검: 지금 건수 vs 최근 백업 건수
+async function runCheck() {
+  const list = await D.listBackups(U());
+  const now = snapshot(), nowC = countsOf(now);
+  if (!list.length) return { nowC, bk: null };
+  const bk = list[0];
+  let bkData = null, bkC = bk.counts;
+  if (!bkC) { bkData = normalizeData(await D.loadBackup(U(), bk)); bkC = countsOf(bkData); }
+  const less = CK.some(([k]) => (nowC[k] || 0) < (bkC[k] || 0));
+  const same = CK.every(([k]) => (nowC[k] || 0) === (bkC[k] || 0));
+  let missing = [];
+  if (less) { bkData = bkData || normalizeData(await D.loadBackup(U(), bk)); missing = missingNow(bkData, now); }
+  return { nowC, bk, bkC, less, same, missing, bkData };
+}
+async function refreshCheckStatus() {
+  try { const r = await runCheck(); S.ckStatus = !r.bk ? 'none' : r.less ? 'less' : 'ok'; } catch (e) { S.ckStatus = null; }
+  render();
+}
+function ckTable(h1, h2, a, b, mark) {
+  return `<table class="ck"><thead><tr><th></th><th>${h1}</th><th>${h2}</th><th></th></tr></thead><tbody>${CK.map(([k, l]) => {
+    const x = a[k] || 0, y = b[k] || 0;
+    const m = mark ? mark(x, y) : '';
+    return `<tr class="${m === 'no' ? 'bad' : ''}"><td>${l}</td><td>${x}</td><td>${y}</td><td class="${m}">${m === 'ok' ? '✓' : m === 'no' ? '!' : m === 'up' ? '+' + (x - y) : ''}</td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+const missList = (list) => list.length ? `<div class="miss">${list.slice(0, 30).map(esc).join('<br>')}${list.length > 30 ? `<br>외 ${list.length - 30}건` : ''}</div>` : '';
+function checkHtml() {
+  const sh = S.sheet;
+  let h = band('#111111', '데이터 점검');
+  if (sh.busy || !sh.r) return h + '<p class="muted" style="font-size:14px;margin-top:14px">확인하는 중</p>';
+  const r = sh.r;
+  if (!r.bk) return h + `<div class="st">아직 백업이 없어요</div>${ckTable('지금', '', r.nowC, {}, () => '')}<div class="acts"><button class="btn" data-act="close">닫기</button><button class="btn pri" data-act="ckBackup">지금 백업</button></div>`;
+  const st = r.same ? '<div class="st ok"><i></i>모두 일치</div>' : r.less ? `<div class="st bad"><i></i>백업보다 줄어든 항목이 있어요</div>` : '<div class="st ok"><i></i>줄어든 항목 없음</div>';
+  h += st + ckTable('지금', '최근 백업', r.nowC, r.bkC, (x, y) => x === y ? 'ok' : x < y ? 'no' : 'up');
+  h += `<p class="meta">최근 백업 ${fmtAt(r.bk.at)}${r.bk.ver ? ' · v' + esc(r.bk.ver) : ''}</p>`;
+  if (r.less) h += missList(r.missing);
+  h += r.less
+    ? `<div class="acts"><button class="btn" data-act="ckBackup">지금 백업</button><button class="btn pri" data-act="ckRevive">되살리기</button></div>`
+    : `<div class="acts"><button class="btn" data-act="close">닫기</button><button class="btn pri" data-act="ckBackup">지금 백업</button></div>`;
+  return h;
+}
+function impPrevHtml() {
+  const sh = S.sheet;
+  let h = band('#111111', '백업 파일로 복원');
+  h += `<p class="meta">${esc(sh.name || '')}${sh.at ? `<br>${esc(sh.at)}` : ''}</p>`;
+  h += ckTable('파일', '지금', countsOf(sh.file), countsOf(snapshot()), () => '');
+  return h + `<div class="acts"><button class="btn" data-act="close">취소</button><button class="btn pri" data-act="impGo" ${sh.busy ? 'disabled' : ''}>${sh.busy ? '복원하는 중' : '복원'}</button></div>`;
+}
+function impResHtml() {
+  const sh = S.sheet, n = sh.missing.length;
+  let h = band('#111111', '복원 결과');
+  h += n ? `<div class="st bad"><i></i>${n}건이 들어오지 않았어요</div>` : '<div class="st ok"><i></i>모두 들어왔어요</div>';
+  h += ckTable('파일', '들어옴', countsOf(sh.file), sh.got, (x, y) => x === y ? 'ok' : 'no');
+  h += missList(sh.missing);
+  return h + `<div class="acts"><button class="btn" data-act="impUndo" ${sh.busy ? 'disabled' : ''}>되돌리기</button>${n ? `<button class="btn pri" data-act="impGo" ${sh.busy ? 'disabled' : ''}>다시 시도</button>` : '<button class="btn pri" data-act="close">확인</button>'}</div>`;
+}
+function openImport(file, name, at) {
+  openSheet({ kind: 'impPrev', file, name, at });
+}
+async function doImport() {
+  const sh = S.sheet;
+  if (sh.busy) return;
+  sh.busy = true; render();
+  try {
+    const cur = await D.syncNow(U());
+    // 복원 직전 상태를 먼저 백업. 실패하면 복원하지 않음
+    await D.backupNow(U(), cur, '복원 직전 자동 백업', APP_VERSION, countsOf(cur));
+    const plan = planMerge(cur, sh.file);
+    await D.applyMerge(U(), plan);
+    const after = await D.syncNow(U());
+    const v = verifyMerge(sh.file, after);
+    const prevPlan = sh.kind === 'impRes' && sh.plan ? sh.plan : null;
+    const merged = prevPlan ? mergePlans(prevPlan, plan) : plan;
+    S.sheet = { kind: 'impRes', file: sh.file, got: v.got, missing: v.missing, plan: merged };
+  } catch (e) {
+    console.error(e); sh.busy = false;
+    toast('복원하지 못했어요. 인터넷 연결을 확인해 주세요');
+  }
+  render();
+}
+function mergePlans(a, b) {
+  const out = { add: {}, yb: [...(a.yb || []), ...(b.yb || [])], settings: a.settings || b.settings };
+  if (a.settings && b.settings) out.settings = { before: a.settings.before, after: b.settings.after };
+  D.COLS.forEach((n) => { out.add[n] = [...(a.add[n] || []), ...(b.add[n] || [])]; });
+  return out;
+}
+async function undoImport() {
+  const sh = S.sheet;
+  if (sh.busy) return;
+  sh.busy = true; render();
+  try { await D.undoMerge(U(), sh.plan); closeSheet(); toast('되돌렸어요'); } catch (e) { console.error(e); sh.busy = false; toast('되돌리지 못했어요. 인터넷 연결을 확인해 주세요'); render(); }
+}
+async function doSync() {
+  if (S.syncing) return;
+  S.syncing = true; render();
+  try {
+    const d = await D.syncNow(U());
+    D.COLS.forEach((c) => { S[c] = d[c]; });
+    if (d.settings) S.settings = { todoColor: '#CFCFCF', cats: [], topics: [], ...d.settings };
+    S.syncAt = Date.now();
+    if (BR) { try { BR.refresh(); } catch (e) {} }
+    toast('동기화했어요');
+  } catch (e) {
+    console.error(e); toast('동기화하지 못했어요. 인터넷 연결을 확인해 주세요');
+  }
+  S.syncing = false; render();
+}
+
 function saveSettings(st) { S.settings = st; D.saveSettings(U(), st); }
 const clone = (o) => JSON.parse(JSON.stringify(o));
 
@@ -858,7 +1060,13 @@ const ACT = {
   },
 
   // 설정
-  acc: (el) => { S.acc[el.dataset.v] = !S.acc[el.dataset.v]; render(); },
+  acc: (el) => { S.acc[el.dataset.v] = !S.acc[el.dataset.v]; render(); if (el.dataset.v === 'data' && S.acc.data) refreshCheckStatus(); },
+  sync: () => doSync(),
+  ckOpen: async () => { openSheet({ kind: 'check', busy: true }); try { const r = await runCheck(); if (S.sheet?.kind === 'check') { S.sheet.r = r; S.sheet.busy = false; } S.ckStatus = !r.bk ? 'none' : r.less ? 'less' : 'ok'; } catch (e) { console.error(e); closeSheet(); toast('점검하지 못했어요. 인터넷 연결을 확인해 주세요'); } render(); },
+  ckBackup: async () => { const sh = S.sheet; sh.busy = true; render(); try { await backupCurrent('직접 백업'); toast('백업했어요'); } catch (e) { toast('백업하지 못했어요. 인터넷 연결을 확인해 주세요'); } ACT.ckOpen(); },
+  ckRevive: () => { const r = S.sheet.r; if (r && r.bkData) openImport(r.bkData, '최근 백업', fmtAt(r.bk.at)); },
+  impGo: () => doImport(),
+  impUndo: () => undoImport(),
   defCat: () => openSheet({ kind: 'defcat', draft: { ...defCat() } }),
   defCatSave: () => { const st = clone(S.settings); st.defCat = S.sheet.draft.cat; st.defSub = S.sheet.draft.sub || ''; saveSettings(st); closeSheet(); },
   catEdit: (el) => { const c = catOf(el.dataset.id); if (c) openSheet({ kind: 'cat', draft: clone(c), isNew: false }); },
@@ -909,9 +1117,10 @@ const ACT = {
     catch (e) { if (S.sheet) { S.sheet.list = []; render(); } }
   },
   restoreBk: async (el) => {
-    const sh = S.sheet;
-    if (sh.arm !== el.dataset.id) { sh.arm = el.dataset.id; render(); return; }
-    await restore(sh.list.find((x) => x.id === el.dataset.id));
+    const b = S.sheet.list.find((x) => x.id === el.dataset.id);
+    if (!b) return;
+    try { openImport(normalizeData(await D.loadBackup(U(), b)), b.reason || '자동 백업', fmtAt(b.at) + (b.ver ? ' · v' + b.ver : '')); }
+    catch (e) { console.error(e); toast('백업을 읽지 못했어요'); }
   },
   logout: () => { D.logout(); },
 };
@@ -957,9 +1166,9 @@ $app.addEventListener('change', async (e) => {
   const el = e.target;
   if (el.id === 'imp' && el.files[0]) {
     try {
-      const data = JSON.parse(await el.files[0].text());
-      if (!Array.isArray(data.items)) throw new Error('형식');
-      if (confirmRestore(data)) await restore(data);
+      const raw = JSON.parse(await el.files[0].text());
+      const at = raw.at ? fmtAt(Date.parse(raw.at)) + (raw.ver ? ' · v' + raw.ver : '') : '';
+      openImport(normalizeData(raw), el.files[0].name, at);
     } catch (err) { toast('백업 파일을 읽지 못했어요'); }
     el.value = '';
     return;
@@ -976,15 +1185,6 @@ $app.addEventListener('change', async (e) => {
   if (el.dataset.sf === 'mode') { const s = S.sheet.draft.subs[+el.dataset.i]; s.color = el.value === 'own' ? (s.color || S.sheet.draft.color) : null; render(); }
   if (el.dataset.sf === 'color') { S.sheet.draft.subs[+el.dataset.i].color = el.value.toUpperCase(); render(); }
 });
-let pendingFile = null;
-function confirmRestore(data) {
-  const sig = JSON.stringify(data).length;
-  if (pendingFile === sig) { pendingFile = null; return true; }
-  pendingFile = sig;
-  toast('같은 파일을 한 번 더 고르면 복원해요');
-  return false;
-}
-
 let rt;
 window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(render, 120); });
 let lastDay = todayStr();

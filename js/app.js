@@ -7,7 +7,7 @@ import {
 import { occItems, occDates, nextOcc, ruleText, lunarToSolar } from './routine.js';
 import { writeXlsx, buildIcs, downloadBlob, stampName } from './export.js';
 
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.2.1';
 
 const IC = {
   l: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M15 6l-6 6 6 6"/></svg>',
@@ -118,10 +118,11 @@ function headTools(prev, next, opt = {}) {
   const nav = prev ? (W
     ? `<button class="ico bd" aria-label="이전" data-act="${prev}">${IC.l}</button>${opt.today === false ? '' : '<button class="today" data-act="goToday">오늘</button>'}<button class="ico bd" aria-label="다음" data-act="${next}">${IC.r}</button>`
     : `<button class="ico" aria-label="이전" data-act="${prev}">${IC.l}</button>${opt.today === false ? '' : '<button class="today" data-act="goToday">오늘</button>'}<button class="ico" aria-label="다음" data-act="${next}">${IC.r}</button>`) : '';
-  const extra = opt.extra || '';
+  const extra = (opt.extra || '') + (opt.plus ? PLUS(opt.plus) : '');
   const set = W ? '' : `<button class="ico" aria-label="설정" data-act="nav" data-v="settings">${IC.set}</button>`;
   return `<div class="tools">${nav}${extra}${set}</div>`;
 }
+const PLUS = (a='fab') => `<button class="ico plus" aria-label="추가" data-act="${a}">${IC.plus}</button>`;
 const titleHead = (t, tools = '') => `<div class="head"><div class="big"><h1 class="word">${t}</h1></div>${tools || headTools()}</div>`;
 
 // ---------- 먼슬리 ----------
@@ -197,16 +198,16 @@ function weekBody() {
 function noteColor(n) { const it = n.linkId && findItem(n.linkId); return it ? colorOf(it) : '#111111'; }
 function miniBody() {
   const tab = (k, l) => `<button class="tab ${S.mbTab === k ? 'on' : ''}" data-act="mbTab" data-v="${k}">${l}</button>`;
-  let h = titleHead('미니북') + `<div class="pad"><div class="tabs">${tab('meet', '회의')}${tab('memo', '메모')}${tab('rec', '기록')}</div>`;
+  let h = titleHead('미니북', headTools(null, null, { plus: S.mbTab === 'rec' ? '' : 'fab' })) + `<div class="pad"><div class="tabs">${tab('meet', '회의')}${tab('memo', '메모')}${tab('rec', '기록')}</div>`;
   const byDate = (a, b) => (b.date || '').localeCompare(a.date || '') || (b.created || 0) - (a.created || 0);
   if (S.mbTab === 'meet') {
     const list = S.notes.filter((n) => n.kind === 'meeting').sort(byDate);
-    h += list.map((n) => {
+    h += '<div class="cards">' + list.map((n) => {
       const c = noteColor(n);
       return `<button class="card" style="${sty(c)}" data-act="openNote" data-id="${n.id}"><div class="ch"><span class="tt">${esc(n.title || '(제목 없음)')}</span><small>${n.date ? fmtDot(n.date) : ''}</small></div>
         <div class="kv"><span>일자</span><span>${n.date ? n.date.replace(/-/g, '.') : ''}${n.time ? ' ' + esc(n.time) : ''}</span><span>장소</span><span>${esc(n.place || '')}</span><span>참석자</span><span>${esc(n.attendees || '')}</span></div>
         ${n.content ? `<div class="cm clamp">${esc(n.content)}</div>` : ''}</button>`;
-    }).join('');
+    }).join('') + '</div>';
   } else if (S.mbTab === 'memo') {
     const list = S.notes.filter((n) => n.kind === 'memo').sort(byDate);
     h += list.map((n) => {
@@ -244,9 +245,9 @@ function yearBody() {
   const topics = S.settings.topics || [];
   if (!S.topic || !topicOf(S.topic)) S.topic = topics[0]?.id || null;
   const tp = topicOf(S.topic);
-  let h = `<div class="head"><div class="big"><h1>${S.year}</h1></div>${headTools('yPrev', 'yNext', { today: false, extra: tp ? '<button class="today" data-act="nav" data-v="ysum">요약</button>' : '' })}</div><div class="pad">`;
+  let h = `<div class="head"><div class="big"><h1>${S.year}</h1></div>${headTools('yPrev', 'yNext', { today: false, extra: tp ? '<button class="today" data-act="nav" data-v="ysum">요약</button>' : '', plus: 'topicNew' })}</div><div class="pad">`;
   h += `<div class="chips">${topics.map((t) => `<button class="chip2 ${t.id === S.topic ? 'on' : ''}" data-act="topicSel" data-id="${t.id}">${esc(t.name)}</button>`).join('')}
-    <button class="chip2" aria-label="주제 추가" data-act="topicNew">${small(IC.plus)}</button>${tp ? `<button class="chip2 ghost" data-act="topicEdit" data-id="${tp.id}">편집</button>` : ''}</div>`;
+    ${tp ? `<button class="chip2 ghost" data-act="topicEdit" data-id="${tp.id}">편집</button>` : ''}</div>`;
   if (!tp) return h + '</div>';
   const doc = ybDoc(tp.id, S.year);
   const manual = new Set(doc?.days || []);
@@ -302,7 +303,7 @@ function ysumBody() {
 // ---------- 루틴북 ----------
 function routineBody() {
   const today = todayStr();
-  let h = titleHead('루틴북') + '<div class="pad">';
+  let h = titleHead('루틴북', headTools(null, null, { plus: 'fab' })) + '<div class="pad">';
   [['daily', '매일'], ['weekly', '매주'], ['monthly', '매월'], ['yearly', '매년']].forEach(([k, l]) => {
     const list = S.routines.filter((r) => r.rep === k).sort((a, b) => (nextOcc(a, today) || '9').localeCompare(nextOcc(b, today) || '9'));
     if (!list.length) return;
@@ -358,6 +359,7 @@ function settingsBody() {
 // ---------- 팝업 ----------
 const band = (color, text, closeAct = 'close') => `<div class="band" style="background:${color};color:${textOn(color)}"><span id="bandT">${esc(text)}</span><button class="x" aria-label="닫기" data-act="${closeAct}">${IC.x}</button></div>`;
 const seg = (opts, cur, act, n) => `<div class="seg" style="grid-template-columns:repeat(${n || opts.length},minmax(0,1fr))">${opts.map(([k, l]) => `<button class="${cur === k ? 'on' : ''}" data-act="${act}" data-v="${k}">${l}</button>`).join('')}</div>`;
+const bandIn = (color, val, f = 'title', label = '제목') => `<div class="band in" style="background:${color};color:${textOn(color)}"><input id="bandT" data-f="${f}" value="${esc(val ?? '')}" aria-label="${label}" style="color:inherit" autocomplete="off"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div>`;
 const field = (label, f, val, type = 'text', extra = '') => `<label class="lb" for="f_${f}">${label}</label><input id="f_${f}" type="${type}" data-f="${f}" value="${esc(val ?? '')}" ${extra}>`;
 const area = (label, f, val, h = 96) => `<label class="lb" for="f_${f}">${label}</label><textarea id="f_${f}" data-f="${f}" style="height:${h}px">${esc(val ?? '')}</textarea>`;
 const errLine = (sh) => (sh.err ? `<p class="err">${esc(sh.err)}</p>` : '');
@@ -388,10 +390,9 @@ function editHtml() {
   const isTodo = it.type === 'todo';
   const st = it.status || 'progress';
   const topics = S.settings.topics || [];
-  let h = band(c, it.title || (isTodo ? '새 할 일' : '새 일정'));
+  let h = bandIn(c, it.title);
   if (sh.isNew) h += `<div style="margin-top:12px">${seg([['event', '일정'], ['todo', '할 일']], it.type, 'setType')}</div>`;
   if (isTodo && !sh.isNew) h += `<span class="lb">상태</span>${seg([['progress', '진행'], ['done', '완료'], ['cancel', '취소']], st, 'status')}`;
-  h += field('제목', 'title', it.title);
   h += isTodo ? field('날짜', 'start', it.start, 'date')
     : `<div class="two"><div>${field('시작', 'start', it.start, 'date')}</div><div>${field('종료', 'end', it.end || it.start, 'date')}</div></div>`;
   if (isTodo && isCarried(it, todayStr())) h += `<p class="muted" style="font-size:13px;margin:8px 0 0">원래 날짜 ${fmtMD(it.start)}</p>`;
@@ -415,8 +416,7 @@ function noteHtml() {
   const sh = S.sheet, n = sh.draft;
   const it = n.linkId && findItem(n.linkId);
   const c = it ? colorOf(it) : '#111111';
-  let h = band(c, n.title || (n.kind === 'meeting' ? '새 회의록' : '새 메모'));
-  h += field('제목', 'title', n.title);
+  let h = bandIn(c, n.title);
   if (n.kind === 'meeting') {
     h += `<div class="two"><div>${field('일자', 'date', n.date, 'date')}</div><div>${field('시간', 'time', n.time)}</div></div>`;
     h += field('회의장소', 'place', n.place) + field('참석자', 'attendees', n.attendees) + area('내용', 'content', n.content, 180);
@@ -440,8 +440,7 @@ function recHtml() {
 function rtHtml() {
   const sh = S.sheet, r = sh.draft;
   const c = colorOf({ type: r.kind, cat: r.cat, sub: r.sub });
-  let h = band(c, r.title || '새 루틴');
-  h += field('제목', 'title', r.title);
+  let h = bandIn(c, r.title);
   h += `<span class="lb">종류</span>${seg([['event', '일정'], ['todo', '할 일']], r.kind, 'rtKind')}`;
   h += `<span class="lb">반복</span>${seg([['daily', '매일'], ['weekly', '매주'], ['monthly', '매월'], ['yearly', '매년']], r.rep, 'rtRep')}`;
   if (r.rep === 'weekly') h += `<div class="wds">${WD.map((w, i) => `<button class="${(r.wdays || []).includes(i) ? 'on' : ''}" data-act="rtWd" data-v="${i}">${w}</button>`).join('')}</div>`;
@@ -476,8 +475,7 @@ function defCatHtml() {
 function catHtml() {
   const sh = S.sheet, d = sh.draft, col = d.color;
   const isTopic = sh.kind === 'topic';
-  let h = band(col, sh.todo ? '할 일' : (d.name || (isTopic ? '새 주제' : '새 분류')));
-  if (!sh.todo) h += `<label class="lb" for="c_name">이름</label><input id="c_name" data-f="name" value="${esc(d.name || '')}">`;
+  let h = sh.todo ? band(col, '할 일') : bandIn(col, d.name, 'name', '이름');
   h += `<span class="lb">색</span><div class="pal">${PALETTE.map((p) => `<button style="background:${p}" class="${p.toUpperCase() === (col || '').toUpperCase() ? 'on' : ''}" aria-label="${p}" data-act="pick" data-v="${p}"></button>`).join('')}</div>
     <label class="lb" for="c_hex">직접 지정</label><div class="hexrow"><input type="color" aria-label="색 고르기" data-pick="1" value="${col}"><input id="c_hex" data-f="hex" value="${col}"></div>`;
   if (sh.kind === 'cat' && !sh.todo) {
@@ -524,10 +522,10 @@ function render() {
   if (wide()) {
     const mi = (v, l) => `<button class="mi ${navV === v ? 'on' : ''}" data-act="nav" data-v="${v}">${l}</button>`;
     const right = V === 'month' ? `<aside class="rpanel"><p class="dt ${dayClass(S.sel)}">${fmtMD(S.sel)}${HOLIDAYS[S.sel] ? ' · ' + HOLIDAYS[S.sel] : ''}</p><p class="dn">${parse(S.sel).getDate()}</p>${dayList(S.sel)}<button class="btn sm" style="margin-top:6px" data-act="newOn" data-d="${S.sel}">추가</button></aside>` : '';
-    html = `<div class="wide"><nav class="side"><button class="add" data-act="fab">${IC.plus}새로 추가</button>${mi('month', '먼슬리')}${mi('week', '위클리')}${mi('mini', '미니북')}${mi('year', '이어북')}${mi('routine', '루틴북')}<div class="grow"></div><button class="mi set ${V === 'settings' ? 'on' : ''}" data-act="nav" data-v="settings">설정</button></nav><main class="main">${page}</main>${right}${sheetHtml()}</div>`;
+    html = `<div class="wide"><nav class="side">${mi('month', '먼슬리')}${mi('week', '위클리')}${mi('mini', '미니북')}${mi('year', '이어북')}${mi('routine', '루틴북')}<div class="grow"></div><button class="mi set ${V === 'settings' ? 'on' : ''}" data-act="nav" data-v="settings">설정</button></nav><main class="main">${page}</main>${right}${sheetHtml()}</div>`;
   } else {
     const tab = (v, l) => `<button class="${navV === v ? 'on' : ''}" data-act="nav" data-v="${v}">${l}</button>`;
-    const showFab = !['settings', 'ysum', 'year'].includes(V) && !(V === 'mini' && S.mbTab === 'rec');
+    const showFab = ['month', 'week'].includes(V);
     const fab = showFab ? `<button class="fab" aria-label="추가" data-act="fab">${IC.plus}</button>` : '';
     html = `<div class="phone"><div class="page">${page}</div>${V !== 'settings' ? `<nav class="nav">${tab('month', '먼슬리')}${tab('week', '위클리')}${tab('mini', '미니북')}${tab('year', '이어북')}${tab('routine', '루틴북')}</nav>` : ''}${fab}${sheetHtml()}</div>`;
   }
@@ -561,7 +559,7 @@ function newItem(type, d) {
 }
 function newForm(d) {
   swapSheet({ kind: 'edit', draft: newItem('event', d), isNew: true });
-  setTimeout(() => document.getElementById('f_title')?.focus(), 30);
+  setTimeout(() => document.getElementById('bandT')?.focus(), 30);
 }
 const save = (name, obj) => { try { D.saveDoc(U(), name, obj); } catch (e) { toast('저장하지 못했어요'); } };
 const armDel = () => { if (!S.delArm) { S.delArm = true; render(); return false; } return true; };
@@ -629,6 +627,60 @@ function exportIcs(withTodos) {
 }
 
 // ---------- 동작 ----------
+const ybAnchor = { d: null, topic: null, on: true };
+const ybDrag = { timer: 0, active: false, on: true, days: new Set(), start: null, cur: null, x: 0, y: 0, quiet: 0 };
+function ybApply(days, on) {
+  const id = `${S.topic}_${S.year}`;
+  const doc = ybDoc(S.topic, S.year) || { id, topic: S.topic, year: S.year, days: [], memo: '' };
+  const set = new Set(doc.days || []);
+  days.forEach((d) => (on ? set.add(d) : set.delete(d)));
+  const nd = { ...doc, days: [...set].sort() };
+  const i = S.yb.findIndex((x) => x.id === id);
+  if (i >= 0) S.yb[i] = nd; else S.yb.push(nd);
+  save('yb', nd); render();
+}
+const ybCellAt = (x, y) => { const c = document.elementFromPoint(x, y); return c && c.classList.contains('yc') ? c : null; };
+function ybPreview(cur) {
+  const [a, z] = ybDrag.start < cur ? [ybDrag.start, cur] : [cur, ybDrag.start];
+  const col = ybDrag.on ? topicOf(S.topic).color : '#EDEDED';
+  ybDrag.days = new Set();
+  document.querySelectorAll('.ygrid .yc').forEach((c) => {
+    if (c.dataset.orig === undefined) c.dataset.orig = c.style.background;
+    const d = c.dataset.d, inR = d >= a && d <= z && !c.dataset.link;
+    if (inR) ybDrag.days.add(d);
+    c.style.background = inR ? col : c.dataset.orig;
+  });
+}
+$app.addEventListener('touchstart', (e) => {
+  const c = e.target.closest && e.target.closest('.yc');
+  if (!c || c.dataset.link || e.touches.length > 1) return;
+  const t = e.touches[0];
+  ybDrag.x = t.clientX; ybDrag.y = t.clientY;
+  clearTimeout(ybDrag.timer);
+  ybDrag.timer = setTimeout(() => {
+    const set = new Set(ybDoc(S.topic, S.year)?.days || []);
+    ybDrag.active = true; ybDrag.on = !set.has(c.dataset.d); ybDrag.start = c.dataset.d; ybDrag.cur = c.dataset.d;
+    ybPreview(c.dataset.d);
+    if (navigator.vibrate) navigator.vibrate(15);
+  }, 450);
+}, { passive: true });
+$app.addEventListener('touchmove', (e) => {
+  const t = e.touches[0];
+  if (!ybDrag.active) { if (Math.abs(t.clientX - ybDrag.x) + Math.abs(t.clientY - ybDrag.y) > 10) clearTimeout(ybDrag.timer); return; }
+  e.preventDefault();
+  const c = ybCellAt(t.clientX, t.clientY);
+  if (c && c.dataset.d !== ybDrag.cur) { ybDrag.cur = c.dataset.d; ybPreview(c.dataset.d); }
+}, { passive: false });
+const ybEnd = () => {
+  clearTimeout(ybDrag.timer);
+  if (!ybDrag.active) return;
+  ybDrag.active = false; ybDrag.cur = null; ybDrag.quiet = Date.now() + 500;
+  ybApply([...ybDrag.days], ybDrag.on);
+};
+$app.addEventListener('touchend', ybEnd);
+$app.addEventListener('touchcancel', ybEnd);
+$app.addEventListener('contextmenu', (e) => { if (e.target.closest && e.target.closest('.yc')) e.preventDefault(); });
+
 const ACT = {
   lv: (el) => { S.loginView = el.dataset.v; S.loginErr = ''; S.loginMsg = ''; render(); },
   doLogin: async () => {
@@ -751,17 +803,22 @@ const ACT = {
     const st = clone(S.settings); st.topics = (st.topics || []).filter((t) => t.id !== S.sheet.draft.id);
     saveSettings(st); S.topic = null; closeSheet();
   },
-  ybTog: (el) => {
-    if (el.dataset.link) { const it = findItem(el.dataset.link); if (it) swapSheet({ kind: 'edit', draft: { ...it }, isNew: false }); return; }
-    const id = `${S.topic}_${S.year}`;
-    const doc = ybDoc(S.topic, S.year) || { id, topic: S.topic, year: S.year, days: [], memo: '' };
-    const set = new Set(doc.days || []);
+  ybTog: (el, e) => {
+    if (Date.now() < ybDrag.quiet) return;
     const d = el.dataset.d;
-    if (set.has(d)) set.delete(d); else set.add(d);
-    const nd = { ...doc, days: [...set].sort() };
-    const i = S.yb.findIndex((x) => x.id === id);
-    if (i >= 0) S.yb[i] = nd; else S.yb.push(nd);
-    save('yb', nd); render();
+    const set = new Set(ybDoc(S.topic, S.year)?.days || []);
+    if (e && e.shiftKey && ybAnchor.d && ybAnchor.d.slice(0, 4) === d.slice(0, 4) && ybAnchor.topic === S.topic) {
+      const [a, b] = ybAnchor.d < d ? [ybAnchor.d, d] : [d, ybAnchor.d];
+      const linked = linkedDays(S.topic, S.year);
+      const days = [];
+      for (let x = a; x <= b; x = addDays(x, 1)) if (!linked.has(x)) days.push(x);
+      ybApply(days, ybAnchor.on);
+      return;
+    }
+    if (el.dataset.link) { const it = findItem(el.dataset.link); if (it) swapSheet({ kind: 'edit', draft: { ...it }, isNew: false }); return; }
+    const on = !set.has(d);
+    ybAnchor.d = d; ybAnchor.topic = S.topic; ybAnchor.on = on;
+    ybApply([d], on);
   },
   ysumXlsx: async () => {
     const tp = topicOf(S.topic);
@@ -864,7 +921,7 @@ $app.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');
   if (!el || !$app.contains(el)) return;
   const f = ACT[el.dataset.act];
-  if (f) { e.preventDefault(); f(el); }
+  if (f) { e.preventDefault(); f(el, e); }
 });
 function setField(el, live) {
   const sh = S.sheet, d = sh.draft || sh, f = el.dataset.f;
@@ -884,7 +941,7 @@ function setField(el, live) {
   }
   if (sh.kind === 'xlsx') { sh[f] = el.value; return false; }
   d[f] = el.value;
-  if (f === 'title' || f === 'name') { const b = document.getElementById('bandT'); if (b) b.textContent = el.value || ' '; }
+  if ((f === 'title' || f === 'name') && el.id !== 'bandT') { const b = document.getElementById('bandT'); if (b && b.tagName !== 'INPUT') b.textContent = el.value || ' '; }
   if (live) return false;
   if (f === 'cat') d.sub = '';
   if (f === 'start' && d.type === 'event' && (d.end || '') < el.value) d.end = el.value;

@@ -2,7 +2,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  sendPasswordResetEmail, signOut,
+  sendPasswordResetEmail, signOut, reauthenticateWithCredential, EmailAuthProvider,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
@@ -35,6 +35,7 @@ export const login = (email, pw) => signInWithEmailAndPassword(auth, email, pw);
 export const signup = (email, pw) => createUserWithEmailAndPassword(auth, email, pw);
 export const resetPw = (email) => sendPasswordResetEmail(auth, email);
 export const logout = () => signOut(auth);
+export const reauth = (pw) => reauthenticateWithCredential(auth.currentUser, EmailAuthProvider.credential(auth.currentUser.email, pw));
 
 // 데이터 묶음: items(일정·할 일), notes(회의·메모), records(기록), routines(루틴), yb(이어북)
 export const COLS = ['items', 'notes', 'records', 'routines', 'yb', 'projects'];

@@ -294,3 +294,25 @@ input[type=date]{min-width:0;padding:0 8px}
 .pjmemo{display:block;width:100%;min-height:120px;border:0;padding:10px;font-size:14px;line-height:22px;resize:vertical;font-family:inherit}
 .pjcols{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:20px;align-items:start}
 .acts .btn{min-width:0;padding:0 10px}
+
+/* 연봉 · 잠금 */
+.lockbox{border:1.5px solid #111;margin:0 0 14px;padding:30px 16px;display:flex;flex-direction:column;align-items:center;gap:14px}
+.lockbox svg{width:32px;height:32px}
+.lockbox b{font-size:16px;font-weight:500}
+.lockbox .btn{width:180px}
+.sec .sh .lk{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:400;width:auto;white-space:nowrap;color:#fff}
+.sec .sh .lk svg{width:15px;height:15px}
+table.sal{table-layout:auto}
+table.sal .r{text-align:right}
+table.sal td.up{color:#2E7D4F}
+table.sal tr.co td{background:#F4F4F4;font-weight:500;font-size:12px;color:#111;padding:6px 10px;cursor:default}
+.wonh{font-size:12px;color:#6B6B6B;margin:5px 0 0;min-height:16px}
+.rate{font-size:13px;color:#2E7D4F;margin:4px 0 0;min-height:18px}
+.dots{display:flex;justify-content:center;gap:14px;margin:22px 0 8px}
+.dots i{width:14px;height:14px;border:1.5px solid #111;border-radius:50%}
+.dots i.on{background:#111}
+.kp{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.kp button{height:52px;font-size:20px;border:1px solid #E6E6E6}
+.kp button:active{background:#F4F4F4}
+.lk2{display:block;margin:16px auto 0;font-size:13px;color:#6B6B6B;text-decoration:underline}
+.lk2.red{color:#A32D2D}

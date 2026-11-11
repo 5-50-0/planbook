@@ -7,7 +7,7 @@ import {
 import { occItems, occDates, nextOcc, ruleText, lunarToSolar } from './routine.js';
 import { writeXlsx, buildIcs, downloadBlob, stampName } from './export.js';
 
-export const APP_VERSION = '1.3.1';
+export const APP_VERSION = '1.4.0';
 
 const NI = {
   month: '<rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M8 2.5v4M16 2.5v4"/><circle cx="8" cy="14" r=".6"/><circle cx="12" cy="14" r=".6"/><circle cx="16" cy="14" r=".6"/><circle cx="8" cy="17.3" r=".6"/><circle cx="12" cy="17.3" r=".6"/>',
@@ -20,6 +20,8 @@ const NI = {
 };
 const nIc = (k) => `<svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${NI[k]}</svg>`;
 const IC = {
+  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>',
+  unlock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 7.6-1.7"/></svg>',
   dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   sync: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 12a8 8 0 0 1-14.3 4.9M4 12A8 8 0 0 1 18.3 7.1"/><path d="M18.5 3v4.3h-4.3M5.5 21v-4.3h4.3"/></svg>',
@@ -229,7 +231,7 @@ function miniBody() {
         ${n.content ? `<div class="mb">${esc(n.content)}</div>` : ''}${it ? `<div class="lkd"><i style="background:${colorOf(it)}"></i>${fmtDot(it.start)} ${esc(it.title)}</div>` : ''}</button>`;
     }).join('');
   } else {
-    h += recSection('salary', '연봉', ['연도', '기본연봉', '성과급', '직급'], (r) => [r.year, r.base, r.bonus, r.rank], (a, b) => String(b.year).localeCompare(String(a.year)));
+    h += salSections();
     h += recSection('cert', '자격증', ['자격증명', '취득일', '발급기관'], (r) => [r.name, (r.date || '').replace(/-/g, '.'), r.issuer], (a, b) => (a.date || '').localeCompare(b.date || ''));
     h += recSection('edu', '교육', ['교육명', '기관', '수료일'], (r) => [r.name, r.org, (r.end || '').replace(/-/g, '.')], (a, b) => (b.end || '').localeCompare(a.end || ''));
   }
@@ -365,6 +367,7 @@ function settingsBody() {
   h += `<button class="acc" data-act="acc" data-v="acct"><span>계정</span><span>${A.acct ? '−' : '+'}</span></button>`;
   if (A.acct) {
     h += `<div class="row">로그인 계정<span class="vl">${esc(S.user?.email || '')}</span></div>
+      <button class="row" data-act="pinSet">기록 잠금 비밀번호<span class="vl">${S.settings.recPin ? '설정됨' : '없음'}</span></button>
       <button class="row red" data-act="logout">로그아웃</button>
       <div class="row">앱 버전<span class="vl">${APP_VERSION}</span></div>`;
   }
@@ -392,6 +395,7 @@ function sheetHtml() {
     day: () => `${band('#111111', `${fmtMD(sh.d)}${HOLIDAYS[sh.d] ? ' · ' + HOLIDAYS[sh.d] : ''}`)}<div style="margin-top:12px">${dayList(sh.d)}</div><button class="btn pri" style="width:100%;margin-top:8px" data-act="newOn" data-d="${sh.d}">추가</button>`,
     edit: editHtml, cat: catHtml, topic: catHtml, note: noteHtml, rec: recHtml, rt: rtHtml, rocc: roccHtml, defcat: defCatHtml,
     backups: backupsHtml, check: checkHtml, impPrev: impPrevHtml, impRes: impResHtml,
+    ct: ctHtml, bn: bnHtml, pin: pinHtml,
     pjName: pjNameHtml, pjMenu: pjMenuHtml, pjDone: pjDoneHtml, pjChoose: pjChooseHtml, pjPick: pjPickHtml, plan: planHtml,
     xlsx: () => `${band('#111111', '엑셀로 내보내기')}<div class="two">${'<div>' + field('시작', 'from', sh.from, 'date') + '</div><div>' + field('끝', 'to', sh.to, 'date') + '</div>'}</div>${errLine(sh)}<div class="acts"><button class="btn pri" data-act="xlsxGo">내보내기</button></div>`,
     ics: () => `${band('#111111', '구글 캘린더용 내보내기')}<label class="check"><input type="checkbox" data-f="todos" ${sh.todos ? 'checked' : ''}> 할 일도 종일 일정으로 넣기</label>${errLine(sh)}<div class="acts"><button class="btn pri" data-act="icsGo">내보내기</button></div>`,
@@ -730,6 +734,211 @@ function afterItemSaved(it) {
   return rest;
 }
 
+// ---------- 연봉 · 성과급 (계약 단위) ----------
+const wonOf = (v) => { const n = Number(String(v ?? '').replace(/[^\d]/g, '')); return Number.isFinite(n) ? n : 0; };
+const commas = (n) => (n || n === 0 ? Number(n).toLocaleString('ko-KR') : '');
+const man = (won) => (won ? Math.round(won / 10000).toLocaleString('ko-KR') : '0');
+const wonText = (won) => {
+  if (!won) return '';
+  const m = Math.floor(won / 10000), r = won % 10000;
+  return `${m ? commas(m) + '만' : ''}${r ? (m ? ' ' : '') + commas(r) : ''}원`;
+};
+const CT_TYPE = [['join', '입사'], ['regular', '정기'], ['adjust', '조정'], ['promo', '승진'], ['move', '이직']];
+const ctTypeTxt = (t) => (CT_TYPE.find((x) => x[0] === t) || ['', ''])[1];
+// 옛 형식(연도 1줄) 기록도 계약·성과급으로 읽어서 보여줌. 원본은 그대로 둠
+function salData() {
+  const contracts = [], bonuses = [];
+  S.records.forEach((r) => {
+    if (r.kind === 'contract') contracts.push(r);
+    else if (r.kind === 'bonus') bonuses.push(r);
+    else if (r.kind === 'salary') {
+      const y = String(r.year || '').trim();
+      if (wonOf(r.base) || r.rank) contracts.push({ id: r.id, kind: 'contract', legacy: true, company: r.company || '', date: y ? `${y}-01-01` : '', base: wonOf(r.base), rank: r.rank || '', type: '', memo: '' });
+      if (wonOf(r.bonus)) bonuses.push({ id: r.id + '~b', kind: 'bonus', legacy: true, legacyOf: r.id, company: r.company || '', date: y ? `${y}-12-31` : '', amount: wonOf(r.bonus), memo: '이전 기록' });
+    }
+  });
+  contracts.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.created || 0) - (b.created || 0));
+  bonuses.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  return { contracts, bonuses };
+}
+const rateTxt = (now, prev) => (prev ? `${now >= prev ? '+' : ''}${(((now - prev) / prev) * 100).toFixed(1)}%` : '');
+function prevContract(contracts, c) {
+  const before = contracts.filter((x) => x.id !== c.id && (x.date || '') <= (c.date || '') && !(x.date === c.date && (x.created || 0) > (c.created || 0)));
+  return before[before.length - 1] || null;
+}
+function salYears(contracts, bonuses) {
+  const ys = new Set();
+  contracts.forEach((c) => c.date && ys.add(+c.date.slice(0, 4)));
+  bonuses.forEach((b) => b.date && ys.add(+b.date.slice(0, 4)));
+  if (!ys.size) return [];
+  const min = Math.min(...ys), max = Math.max(...ys, new Date().getFullYear());
+  const out = [];
+  let prevEnd = null;
+  for (let y = min; y <= max; y++) {
+    const end = contracts.filter((c) => c.date && c.date <= `${y}-12-31`).pop() || null;
+    const bsum = bonuses.filter((b) => (b.date || '').startsWith(String(y))).reduce((s, b) => s + (b.amount || 0), 0);
+    const started = end && (end.date || '').startsWith(String(y));
+    if (end || bsum) out.push({ y, end, rate: started && prevEnd ? rateTxt(end.base, prevEnd.base) : '', bsum });
+    if (end) prevEnd = end;
+  }
+  return out.reverse();
+}
+function lastCompany() {
+  const all = S.records.filter((r) => (r.kind === 'contract' || r.kind === 'bonus') && r.company);
+  all.sort((a, b) => (a.created || 0) - (b.created || 0));
+  return all.length ? all[all.length - 1].company : '';
+}
+function salSections() {
+  const { contracts, bonuses } = salData();
+  const plus = (act, label) => `<button aria-label="${label} 추가" data-act="${act}">${small(IC.plus, 18)}</button>`;
+  if (S.settings.recPin && !S.unlocked) {
+    return `<div class="lockbox">${IC.lock}<b>연봉 · 성과급</b><button class="btn pri" data-act="pinOpen">열기</button></div>`;
+  }
+  const lockBtn = S.settings.recPin ? `<button class="lk" data-act="relock">${IC.unlock}잠그기</button>` : '';
+  let h = `<div class="sec"><div class="sh"><span>연도별 요약</span>${lockBtn}</div><table class="sal"><thead><tr><th>연도</th><th class="r">연말 연봉</th><th class="r">인상률</th><th class="r">성과급</th></tr></thead><tbody>`;
+  h += salYears(contracts, bonuses).map((r) => `<tr><td>${r.y}</td><td class="r">${r.end ? man(r.end.base) : ''}</td><td class="r up">${r.rate}</td><td class="r">${r.bsum ? man(r.bsum) : ''}</td></tr>`).join('');
+  h += '</tbody></table></div>';
+  // 계약: 회사별 묶음, 최근 계약이 있는 회사부터
+  const byCo = new Map();
+  contracts.slice().reverse().forEach((c) => { const k = c.company || ''; if (!byCo.has(k)) byCo.set(k, []); byCo.get(k).push(c); });
+  h += `<div class="sec"><div class="sh"><span>연봉 계약</span>${plus('ctNew', '연봉 계약')}</div><table class="sal"><thead><tr><th>적용일</th><th class="r">기본연봉</th><th class="r">인상률</th><th>직급</th><th>구분</th></tr></thead><tbody>`;
+  byCo.forEach((list, co) => {
+    h += `<tr class="co"><td colspan="5">${esc(co || '회사 미입력')}</td></tr>`;
+    h += list.map((c) => { const p = prevContract(contracts, c); return `<tr data-act="ctOpen" data-id="${c.id}"><td>${dotYmd(c.date)}</td><td class="r">${man(c.base)}</td><td class="r up">${p ? rateTxt(c.base, p.base) : ''}</td><td>${esc(c.rank || '')}</td><td>${ctTypeTxt(c.type)}</td></tr>`; }).join('');
+  });
+  h += '</tbody></table></div>';
+  h += `<div class="sec"><div class="sh"><span>성과급</span>${plus('bnNew', '성과급')}</div><table class="sal"><thead><tr><th>지급일</th><th>회사</th><th class="r">금액</th><th>메모</th></tr></thead><tbody>`;
+  h += bonuses.map((b) => `<tr data-act="bnOpen" data-id="${b.legacyOf || b.id}"><td>${dotYmd(b.date)}</td><td>${esc(b.company || '')}</td><td class="r">${man(b.amount)}</td><td>${esc(b.memo || '')}</td></tr>`).join('');
+  h += '</tbody></table></div>';
+  return h;
+}
+const wonField = (label, f, won) => `<label class="lb" for="f_${f}">${label}</label><input id="f_${f}" data-f="${f}" inputmode="numeric" autocomplete="off" value="${won ? commas(won) : ''}"><p class="wonh" id="wh_${f}">${wonText(won)}</p>`;
+function ctHtml() {
+  const sh = S.sheet, c = sh.draft;
+  const { contracts } = salData();
+  const p = prevContract(contracts, c);
+  let h = band('#111111', '연봉 계약') + field('회사', 'company', c.company);
+  h += `<div class="two"><div>${field('적용일', 'date', c.date, 'date')}</div><div>${field('직급', 'rank', c.rank)}</div></div>`;
+  h += wonField('기본연봉', 'base', c.base);
+  h += `<p class="rate" id="ctRate">${p && c.base ? `직전 계약 대비 ${rateTxt(c.base, p.base)}` : ''}</p>`;
+  h += `<span class="lb">구분</span>${seg(CT_TYPE, c.type, 'ctType')}`;
+  h += area('메모', 'memo', c.memo, 64);
+  return h + errLine(sh) + acts('ctDel', 'ctSave', sh.isNew);
+}
+function bnHtml() {
+  const sh = S.sheet, b = sh.draft;
+  let h = band('#111111', '성과급') + field('회사', 'company', b.company);
+  h += `<div class="two"><div>${field('지급일', 'date', b.date, 'date')}</div><div>${wonField('금액', 'amount', b.amount)}</div></div>`;
+  h += field('메모', 'memo', b.memo);
+  return h + errLine(sh) + acts('bnDel', 'bnSave', sh.isNew);
+}
+// 금액 칸: 입력 중에는 아래 글자만 바꾸고, 칸을 벗어나면 쉼표를 붙임
+function salLive(el) {
+  const sh = S.sheet, f = el.dataset.f;
+  if (!sh || (sh.kind !== 'ct' && sh.kind !== 'bn') || (f !== 'base' && f !== 'amount')) return false;
+  const won = wonOf(el.value);
+  sh.draft[f] = won;
+  const hp = document.getElementById('wh_' + f); if (hp) hp.textContent = wonText(won);
+  if (sh.kind === 'ct') {
+    const p = prevContract(salData().contracts, sh.draft);
+    const r = document.getElementById('ctRate'); if (r) r.textContent = p && won ? `직전 계약 대비 ${rateTxt(won, p.base)}` : '';
+  }
+  return true;
+}
+// ---------- 기록 잠금 비밀번호 ----------
+async function pinHash(pin) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`planbook:${U()}:${pin}`));
+  return [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, '0')).join('');
+}
+// mode: open(열기) / old(지금 비밀번호 확인) / new(새 비밀번호) / again(한 번 더) / pw(로그인 비밀번호로 확인)
+function pinHtml() {
+  const sh = S.sheet;
+  const title = { open: '비밀번호', old: '지금 비밀번호', new: '새 비밀번호', again: '새 비밀번호 확인', pw: '로그인 비밀번호' }[sh.mode];
+  let h = band('#111111', title);
+  if (sh.mode === 'pw') {
+    return h + `<label class="lb" for="f_pw">로그인 비밀번호</label><input id="f_pw" type="password" data-f="pw" autocomplete="current-password" value="">${errLine(sh)}<div class="acts"><button class="btn pri" data-act="pinPwGo">확인</button></div>`;
+  }
+  h += `<div class="dots">${[0, 1, 2, 3].map((i) => `<i class="${i < sh.v.length ? 'on' : ''}"></i>`).join('')}</div>`;
+  h += sh.err ? `<p class="err" style="text-align:center">${esc(sh.err)}</p>` : '';
+  h += `<div class="kp">${[1, 2, 3, 4, 5, 6, 7, 8, 9, '', 0, '←'].map((k) => k === '' ? '<span></span>' : `<button data-act="pinKey" data-v="${k}" aria-label="${k === '←' ? '지우기' : k}">${k}</button>`).join('')}</div>`;
+  if (sh.mode === 'open' || sh.mode === 'old') h += '<button class="lk2" data-act="pinForgot">비밀번호를 잊었어요</button>';
+  if (sh.mode === 'new' && S.settings.recPin) h += '<button class="lk2 red" data-act="pinRemove">잠금 끄기</button>';
+  return h;
+}
+async function pinDone() {
+  const sh = S.sheet, v = sh.v;
+  if (sh.mode === 'open' || sh.mode === 'old') {
+    if ((await pinHash(v)) !== S.settings.recPin) { sh.v = ''; sh.err = '비밀번호가 달라요'; render(); return; }
+    if (sh.mode === 'old') { S.sheet = { kind: 'pin', mode: 'new', v: '' }; render(); return; }
+    S.unlocked = true;
+    if (sh.then === 'xlsx') { const y = new Date().getFullYear(); swapSheet({ kind: 'xlsx', from: `${y}-01-01`, to: `${y}-12-31` }); return; }
+    closeSheet();
+    return;
+  }
+  if (sh.mode === 'new') { S.sheet = { kind: 'pin', mode: 'again', v: '', first: v }; render(); return; }
+  if (sh.mode === 'again') {
+    if (v !== sh.first) { S.sheet = { kind: 'pin', mode: 'new', v: '', err: '두 번 입력한 비밀번호가 달라요' }; render(); return; }
+    saveSettings({ ...S.settings, recPin: await pinHash(v) });
+    S.unlocked = false; closeSheet(); toast('잠금 비밀번호를 정했어요');
+  }
+}
+const SAL_ACT = {
+  ctNew: () => openSheet({ kind: 'ct', isNew: true, draft: { id: uid(), kind: 'contract', company: lastCompany(), date: todayStr(), base: 0, rank: '', type: 'regular', memo: '', created: Date.now() } }),
+  ctOpen: (el) => {
+    const c = salData().contracts.find((x) => x.id === el.dataset.id);
+    if (c) openSheet({ kind: 'ct', isNew: false, draft: { ...c } });
+  },
+  ctType: (el) => { S.sheet.draft.type = el.dataset.v; render(); },
+  ctSave: () => {
+    const sh = S.sheet, c = { ...sh.draft };
+    c.company = (c.company || '').trim();
+    if (!c.date) { sh.err = '적용일을 골라 주세요.'; render(); return; }
+    if (!c.base) { sh.err = '기본연봉을 입력해 주세요.'; render(); return; }
+    // 옛 형식 기록을 고치면 새 형식으로 저장하고, 거기 있던 성과급은 따로 남김
+    const old = c.legacy ? S.records.find((r) => r.id === c.id) : null;
+    delete c.legacy; c.kind = 'contract'; if (!c.created) c.created = Date.now();
+    save('records', c);
+    if (old && wonOf(old.bonus)) save('records', { id: uid(), kind: 'bonus', company: c.company, date: `${String(old.year).trim()}-12-31`, amount: wonOf(old.bonus), memo: '이전 기록', created: Date.now() });
+    closeSheet();
+  },
+  ctDel: () => { if (!armDel()) return; D.deleteDocIn(U(), 'records', S.sheet.draft.id); closeSheet(); },
+  bnNew: () => openSheet({ kind: 'bn', isNew: true, draft: { id: uid(), kind: 'bonus', company: lastCompany(), date: todayStr(), amount: 0, memo: '', created: Date.now() } }),
+  bnOpen: (el) => {
+    const id = el.dataset.id;
+    const b = S.records.find((x) => x.id === id && x.kind === 'bonus');
+    if (b) return openSheet({ kind: 'bn', isNew: false, draft: { ...b } });
+    // 옛 형식 성과급은 그 연도 계약을 열어서 고침
+    const c = salData().contracts.find((x) => x.id === id);
+    if (c) openSheet({ kind: 'ct', isNew: false, draft: { ...c } });
+  },
+  bnSave: () => {
+    const sh = S.sheet, b = { ...sh.draft };
+    b.company = (b.company || '').trim();
+    if (!b.date) { sh.err = '지급일을 골라 주세요.'; render(); return; }
+    if (!b.amount) { sh.err = '금액을 입력해 주세요.'; render(); return; }
+    save('records', b); closeSheet();
+  },
+  bnDel: () => { if (!armDel()) return; D.deleteDocIn(U(), 'records', S.sheet.draft.id); closeSheet(); },
+  pinOpen: () => openSheet(S.settings.recPin ? { kind: 'pin', mode: 'open', v: '' } : { kind: 'pin', mode: 'new', v: '' }),
+  pinSet: () => openSheet(S.settings.recPin ? { kind: 'pin', mode: 'old', v: '' } : { kind: 'pin', mode: 'new', v: '' }),
+  pinKey: (el) => {
+    const sh = S.sheet, k = el.dataset.v;
+    if (k === '←') { sh.v = sh.v.slice(0, -1); render(); return; }
+    if (sh.v.length >= 4) return;
+    sh.v += k; sh.err = '';
+    render();
+    if (sh.v.length === 4) setTimeout(pinDone, 120);
+  },
+  pinForgot: () => { S.sheet = { kind: 'pin', mode: 'pw', pw: '' }; render(); },
+  pinPwGo: async () => {
+    const sh = S.sheet;
+    try { await D.reauth(sh.pw || ''); S.sheet = { kind: 'pin', mode: 'new', v: '' }; render(); }
+    catch (e) { sh.err = '로그인 비밀번호가 달라요.'; render(); }
+  },
+  pinRemove: () => { const st = { ...S.settings }; delete st.recPin; saveSettings(st); S.unlocked = false; closeSheet(); toast('잠금을 껐어요'); },
+  relock: () => { S.unlocked = false; render(); },
+};
+
 // ---------- 전체 그리기 ----------
 const ALL_LOADED = () => S.settings && D.COLS.every((c) => S.loaded[c]);
 function render() {
@@ -771,6 +980,7 @@ function closeSheet(fromPop) {
   if (!fromPop && history.state && history.state.sheet) history.back();
 }
 window.addEventListener('popstate', () => closeSheet(true));
+document.addEventListener('visibilitychange', () => { if (document.hidden && S.unlocked) { S.unlocked = false; if (S.sheet && (S.sheet.kind === 'ct' || S.sheet.kind === 'bn')) closeSheet(); else render(); } });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
 
 function defCat() {
@@ -832,11 +1042,11 @@ function normalizeData(raw) {
   out.settings = raw.settings && typeof raw.settings === 'object' ? raw.settings : null;
   return out;
 }
-const RK = { salary: '연봉', cert: '자격증', edu: '교육' };
+const RK = { salary: '연봉', contract: '연봉 계약', bonus: '성과급', cert: '자격증', edu: '교육' };
 function labelOf(name, o) {
   if (name === 'items') return `${(o.start || '').replace(/-/g, '.')} ${o.title || '(제목 없음)'}`;
   if (name === 'notes') return `${(o.date || '').replace(/-/g, '.')} ${o.title || '(제목 없음)'}`;
-  if (name === 'records') return `${RK[o.kind] || '기록'} ${o.name || o.year || ''}`;
+  if (name === 'records') return `${RK[o.kind] || '기록'} ${o.name || o.year || o.company || ''} ${o.date || ''}`.trim();
   if (name === 'projects') return `플젝 ${o.name || ''}`;
   return `루틴 ${o.title || ''}`;
 }
@@ -1052,7 +1262,8 @@ async function exportXlsx(from, to) {
     { name: '할 일', headers: ['날짜', '제목', '상태', '분류', '메모'], widths: [12, 36, 8, 16, 50], rows: td.map((x) => ({ 날짜: x.start, 제목: x.title, 상태: ST[x.status || 'progress'], 분류: catLabel(x), 메모: x.memo || '' })) },
     { name: '회의', headers: ['일자', '시간', '제목', '회의장소', '참석자', '내용', '연결 일정'], widths: [12, 8, 30, 18, 24, 60, 30], rows: meet.map((n) => ({ 일자: n.date, 시간: n.time || '', 제목: n.title, 회의장소: n.place || '', 참석자: n.attendees || '', 내용: n.content || '', '연결 일정': linkT(n) })) },
     { name: '메모', headers: ['날짜', '제목', '내용', '연결 일정'], widths: [12, 30, 70, 30], rows: memo.map((n) => ({ 날짜: n.date, 제목: n.title, 내용: n.content || '', '연결 일정': linkT(n) })) },
-    { name: '연봉', headers: ['연도', '기본연봉', '성과급', '직급'], widths: [8, 16, 16, 12], rows: recs('salary').sort((a, b) => String(a.year).localeCompare(String(b.year))).map((r) => ({ 연도: r.year, 기본연봉: r.base, 성과급: r.bonus, 직급: r.rank })) },
+    { name: '연봉 계약', headers: ['회사', '적용일', '기본연봉(원)', '직급', '구분', '메모'], widths: [20, 12, 16, 10, 8, 30], rows: salData().contracts.map((c) => ({ 회사: c.company || '', 적용일: c.date, '기본연봉(원)': c.base, 직급: c.rank || '', 구분: ctTypeTxt(c.type), 메모: c.memo || '' })) },
+    { name: '성과급', headers: ['회사', '지급일', '금액(원)', '메모'], widths: [20, 12, 16, 30], rows: salData().bonuses.slice().reverse().map((b) => ({ 회사: b.company || '', 지급일: b.date, '금액(원)': b.amount, 메모: b.memo || '' })) },
     { name: '자격증', headers: ['자격증명', '취득일', '발급기관'], widths: [24, 12, 20], rows: recs('cert').map((r) => ({ 자격증명: r.name, 취득일: r.date, 발급기관: r.issuer })) },
     { name: '교육', headers: ['교육명', '기관', '시작일', '수료일'], widths: [30, 20, 12, 12], rows: recs('edu').map((r) => ({ 교육명: r.name, 기관: r.org, 시작일: r.start || '', 수료일: r.end })) },
   ]);
@@ -1150,7 +1361,7 @@ const ACT = {
     try { await D.resetPw(em); S.loginMsg = '메일을 보냈어요. 메일의 링크에서 새 비밀번호를 정해 주세요.'; } catch (e) { S.loginErr = authMsg(e); }
     S.busy = false; render();
   },
-  nav: (el) => { S.view = el.dataset.v; if (S.sheet) closeSheet(); else render(); },
+  nav: (el) => { if (el.dataset.v !== S.view) S.unlocked = false; S.view = el.dataset.v; if (S.sheet) closeSheet(); else render(); },
   mPrev: () => { let [y, m] = S.month; m--; if (m < 0) { m = 11; y--; } S.month = [y, m]; render(); },
   mNext: () => { let [y, m] = S.month; m++; if (m > 11) { m = 0; y++; } S.month = [y, m]; render(); },
   wPrev: () => { S.sel = addDays(S.sel, -7); render(); },
@@ -1346,7 +1557,12 @@ const ACT = {
     if (st.defCat === S.sheet.draft.id) { st.defCat = st.cats[0].id; st.defSub = ''; }
     saveSettings(st); closeSheet();
   },
-  xlsxOpen: () => { const y = new Date().getFullYear(); openSheet({ kind: 'xlsx', from: `${y}-01-01`, to: `${y}-12-31` }); },
+  xlsxOpen: () => {
+    const y = new Date().getFullYear(), sh = { kind: 'xlsx', from: `${y}-01-01`, to: `${y}-12-31` };
+    const hasSal = S.records.some((r) => r.kind === 'contract' || r.kind === 'bonus' || r.kind === 'salary');
+    if (S.settings.recPin && !S.unlocked && hasSal) return openSheet({ kind: 'pin', mode: 'open', v: '', then: 'xlsx' });
+    swapSheet(sh);
+  },
   xlsxGo: async () => {
     const sh = S.sheet;
     if (!sh.from || !sh.to || sh.from > sh.to) { sh.err = '기간을 확인해 주세요.'; render(); return; }
@@ -1373,7 +1589,7 @@ const ACT = {
   logout: () => { D.logout(); },
 };
 
-Object.assign(ACT, PJ_ACT);
+Object.assign(ACT, PJ_ACT, SAL_ACT);
 
 // ---------- 입력 ----------
 $app.addEventListener('click', (e) => {
@@ -1411,6 +1627,7 @@ function setField(el, live) {
 $app.addEventListener('input', (e) => {
   const el = e.target;
   if (!S.sheet) return;
+  if (salLive(el)) return;
   if (el.dataset.f) setField(el, true);
   if (el.dataset.sf === 'name') S.sheet.draft.subs[+el.dataset.i].name = el.value;
 });
@@ -1437,6 +1654,7 @@ $app.addEventListener('change', async (e) => {
     return;
   }
   if (!S.sheet) return;
+  if (salLive(el)) { el.value = S.sheet.draft[el.dataset.f] ? commas(S.sheet.draft[el.dataset.f]) : ''; return; }
   if (el.dataset.f) { if (setField(el, false)) render(); }
   if (el.dataset.pick) { S.sheet.draft.color = el.value.toUpperCase(); render(); }
   if (el.dataset.sf === 'mode') { const s = S.sheet.draft.subs[+el.dataset.i]; s.color = el.value === 'own' ? (s.color || S.sheet.draft.color) : null; render(); }

@@ -7,9 +7,11 @@ import {
 import { occItems, occDates, nextOcc, ruleText, lunarToSolar } from './routine.js';
 import { writeXlsx, buildIcs, downloadBlob, stampName } from './export.js';
 
-export const APP_VERSION = '1.2.2';
+export const APP_VERSION = '1.3.0';
 
 const IC = {
+  dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   sync: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 12a8 8 0 0 1-14.3 4.9M4 12A8 8 0 0 1 18.3 7.1"/><path d="M18.5 3v4.3h-4.3M5.5 21v-4.3h4.3"/></svg>',
   l: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M15 6l-6 6 6 6"/></svg>',
   r: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>',
@@ -31,7 +33,7 @@ const DEFAULT_SETTINGS = () => ({
 });
 
 const S = {
-  user: undefined, items: [], notes: [], records: [], routines: [], yb: [], settings: null,
+  user: undefined, items: [], notes: [], records: [], routines: [], yb: [], projects: [], settings: null, pjTab: 'progress', pjId: null,
   loaded: {}, view: 'month', sel: todayStr(), month: null,
   loginView: 'login', loginErr: '', loginMsg: '', busy: false,
   sheet: null, acc: { cats: false, topics: false, data: false, acct: false },
@@ -380,6 +382,7 @@ function sheetHtml() {
     day: () => `${band('#111111', `${fmtMD(sh.d)}${HOLIDAYS[sh.d] ? ' · ' + HOLIDAYS[sh.d] : ''}`)}<div style="margin-top:12px">${dayList(sh.d)}</div><button class="btn pri" style="width:100%;margin-top:8px" data-act="newOn" data-d="${sh.d}">추가</button>`,
     edit: editHtml, cat: catHtml, topic: catHtml, note: noteHtml, rec: recHtml, rt: rtHtml, rocc: roccHtml, defcat: defCatHtml,
     backups: backupsHtml, check: checkHtml, impPrev: impPrevHtml, impRes: impResHtml,
+    pjName: pjNameHtml, pjMenu: pjMenuHtml, pjDone: pjDoneHtml, pjChoose: pjChooseHtml, pjPick: pjPickHtml, plan: planHtml,
     xlsx: () => `${band('#111111', '엑셀로 내보내기')}<div class="two">${'<div>' + field('시작', 'from', sh.from, 'date') + '</div><div>' + field('끝', 'to', sh.to, 'date') + '</div>'}</div>${errLine(sh)}<div class="acts"><button class="btn pri" data-act="xlsxGo">내보내기</button></div>`,
     ics: () => `${band('#111111', '구글 캘린더용 내보내기')}<label class="check"><input type="checkbox" data-f="todos" ${sh.todos ? 'checked' : ''}> 할 일도 종일 일정으로 넣기</label>${errLine(sh)}<div class="acts"><button class="btn pri" data-act="icsGo">내보내기</button></div>`,
   };
@@ -400,6 +403,7 @@ function editHtml() {
     : `<div class="two"><div>${field('시작', 'start', it.start, 'date')}</div><div>${field('종료', 'end', it.end || it.start, 'date')}</div></div>`;
   if (isTodo && isCarried(it, todayStr())) h += `<p class="muted" style="font-size:13px;margin:8px 0 0">원래 날짜 ${fmtMD(it.start)}</p>`;
   h += `<span class="lb">분류</span>${catSelects(it)}`;
+  h += pjSelect(it);
   h += area('메모', 'memo', it.memo);
   if (!isTodo) {
     h += `<div class="row" style="border-bottom:none;padding-bottom:0"><span>이어북에 기록</span><button class="sw2 ${it.yb ? 'on' : ''}" role="switch" aria-checked="${!!it.yb}" aria-label="이어북에 기록" data-act="ybSwitch"><i></i></button></div>`;
@@ -422,9 +426,9 @@ function noteHtml() {
   let h = bandIn(c, n.title);
   if (n.kind === 'meeting') {
     h += `<div class="two"><div>${field('일자', 'date', n.date, 'date')}</div><div>${field('시간', 'time', n.time)}</div></div>`;
-    h += field('회의장소', 'place', n.place) + field('참석자', 'attendees', n.attendees) + area('내용', 'content', n.content, 180);
+    h += field('회의장소', 'place', n.place) + field('참석자', 'attendees', n.attendees) + pjSelect(n) + area('내용', 'content', n.content, 180);
   } else {
-    h += field('날짜', 'date', n.date, 'date') + area('내용', 'content', n.content, 200);
+    h += field('날짜', 'date', n.date, 'date') + pjSelect(n) + area('내용', 'content', n.content, 200);
   }
   if (it) h += `<span class="lb">연결된 일정</span><div class="row"><span class="sw" style="background:${c};width:14px;height:14px"></span>${fmtDot(it.start)} ${esc(it.title)}<button class="lk" style="margin-left:auto;padding:4px" data-act="unlink">연결 해제</button></div>`;
   return h + errLine(sh) + acts('delNote', 'saveNote', sh.isNew);
@@ -508,6 +512,214 @@ function backupsHtml() {
   }).join('');
 }
 
+// ---------- 플젝북 ----------
+const pjOf = (id) => S.projects.find((p) => p.id === id);
+const pjItems = (id) => S.items.filter((it) => it.pj === id).sort((a, b) => (a.start || '').localeCompare(b.start || '') || (a.created || 0) - (b.created || 0));
+const pjNotes = (id) => S.notes.filter((n) => n.pj === id).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+const pjStart = (id) => pjItems(id)[0]?.start || '';
+const dotYmd = (d) => (d || '').replace(/-/g, '.');
+function pjPeriod(p) {
+  const s = pjStart(p.id);
+  if (p.status === 'done') return `${dotYmd(s)}${s ? ' – ' : ''}${dotYmd(p.doneDate)}`;
+  return s ? `${dotYmd(s)} –` : '';
+}
+const ST_TXT = { progress: '진행', done: '완료', cancel: '취소' };
+const md2 = (d) => (d || '').slice(5).replace('-', '.');
+
+function projBody() {
+  const tab = (k, l) => `<button class="tab ${S.pjTab === k ? 'on' : ''}" data-act="pjTab" data-v="${k}">${l}</button>`;
+  let h = titleHead('플젝북', headTools(null, null, { plus: 'pjNew' })) + `<div class="pad"><div class="tabs">${tab('progress', '진행')}${tab('done', '완료')}</div>`;
+  const list = S.projects.filter((p) => (p.status === 'done' ? 'done' : 'progress') === S.pjTab)
+    .sort((a, b) => S.pjTab === 'done' ? (b.doneDate || '').localeCompare(a.doneDate || '') : (pjStart(b.id) || '9').localeCompare(pjStart(a.id) || '9') || (b.created || 0) - (a.created || 0));
+  h += '<div class="cards">' + list.map((p) => {
+    const its = pjItems(p.id);
+    const ev = its.filter((x) => x.type !== 'todo').length;
+    const td = its.filter((x) => x.type === 'todo');
+    const done = td.filter((x) => x.status === 'done').length;
+    const base = td.filter((x) => x.status !== 'cancel').length;
+    const pct = base ? Math.round((done / base) * 100) : 0;
+    const per = pjPeriod(p);
+    return `<button class="pj" data-act="pjOpen" data-id="${p.id}"><div class="ch"><span class="tt">${esc(p.name || '(이름 없음)')}</span><small>${esc(per.replace(/^\d{4}\./, '').replace(/ – \d{4}\./, ' – '))}</small></div>
+      <div class="bd"><div class="bar"><i style="width:${pct}%"></i></div><div class="nums">일정<b>${ev}</b>할 일<b>${td.length}</b>완료<b>${done}</b>회의·메모<b>${pjNotes(p.id).length}</b></div></div></button>`;
+  }).join('') + '</div>';
+  return h + '</div>';
+}
+
+function pjDetailBody() {
+  const p = pjOf(S.pjId);
+  if (!p) { S.view = 'proj'; return projBody(); }
+  const W = wide();
+  const dots = `<button class="ico" aria-label="더 보기" data-act="pjMenu">${IC.dots}</button>`;
+  let h = `<div class="head pjh"><div class="big" style="align-items:center;min-width:0"><button class="ico" aria-label="플젝북으로" data-act="nav" data-v="proj">${IC.l}</button><h1 class="word pjn">${esc(p.name || '(이름 없음)')}</h1>${W ? `<span class="per">${pjPeriod(p)}</span>${p.status === 'done' ? '<span class="tg">완료</span>' : ''}` : ''}</div><div class="tools">${dots}</div></div>`;
+  if (!W) h += `<div class="per ph">${pjPeriod(p)}${p.status === 'done' ? '<span class="tg">완료</span>' : ''}</div>`;
+  const plusBtn = (act, label) => `<button aria-label="${label}" data-act="${act}">${small(IC.plus, 18)}</button>`;
+  const its = pjItems(p.id);
+  let secItems = `<div class="sec"><div class="sh"><span>일정 · 할 일</span>${plusBtn('pjItemPlus', '일정 · 할 일 추가')}</div>`;
+  secItems += its.map((it) => `<button class="pk" data-act="open" data-id="${it.id}"><span class="d">${md2(it.start)}</span><span class="sw" style="background:${colorOf(it)}"></span><span class="t">${esc(it.title || '(제목 없음)')}</span>${it.type === 'todo' ? `<span class="o">${ST_TXT[it.status || 'progress']}</span>` : ''}</button>`).join('');
+  if (p.status === 'done') secItems += `<button class="pk end" data-act="pjDone"><span class="d">${md2(p.doneDate)}</span><span class="sw" style="background:#111"></span><span class="t">프로젝트 완료</span></button>`;
+  secItems += '</div>';
+  const plans = (p.plans || []);
+  let secPlans = `<div class="sec"><div class="sh"><span>향후 계획</span>${plusBtn('planNew', '향후 계획 추가')}</div>`;
+  secPlans += plans.map((x) => `<button class="pl" data-act="planOpen" data-id="${x.id}"><span class="d">${x.ym ? `${+x.ym.slice(5)}월` : ''}</span><span>${esc(x.title || '(제목 없음)')}${x.note ? `<small>${esc(x.note)}</small>` : ''}</span></button>`).join('') + '</div>';
+  const ns = pjNotes(p.id);
+  let secNotes = `<div class="sec"><div class="sh"><span>회의 · 메모</span>${plusBtn('pjNotePlus', '회의 · 메모 추가')}</div>`;
+  secNotes += ns.map((n) => `<button class="mm" data-act="openNote" data-id="${n.id}"><div class="mt"><b><span class="tg">${n.kind === 'meeting' ? '회의' : '메모'}</span>${esc(n.title || '(제목 없음)')}</b><small>${md2(n.date)}</small></div></button>`).join('') + '</div>';
+  const secMemo = `<div class="sec"><div class="sh"><span>메모</span></div><textarea id="pjmemo" class="pjmemo" aria-label="메모" data-pjmemo="1">${esc(p.memo || '')}</textarea></div>`;
+  h += W ? `<div class="pad"><div class="pjcols"><div>${secItems}${secPlans}</div><div>${secNotes}${secMemo}</div></div></div>`
+    : `<div class="pad">${secItems}${secPlans}${secNotes}${secMemo}</div>`;
+  return h;
+}
+
+// 시트들
+function pjNameHtml() {
+  const sh = S.sheet;
+  return bandIn('#111111', sh.draft.name, 'name', '이름') + errLine(sh) + `<div class="acts"><button class="btn" data-act="close">취소</button><button class="btn pri" data-act="pjNameSave">${sh.isNew ? '만들기' : '저장'}</button></div>`;
+}
+function pjMenuHtml() {
+  const p = pjOf(S.pjId);
+  if (!p) return '';
+  return band('#111111', p.name || '') + `<button class="row" data-act="pjRename">이름 바꾸기</button>
+    <button class="row" data-act="pjDone">${p.status === 'done' ? '완료일 바꾸기 · 다시 진행' : '완료로 바꾸기'}</button>
+    <button class="row red" data-act="pjDel">${S.delArm ? '정말 삭제 (일정·메모는 남아요)' : '플젝 삭제'}</button>`;
+}
+function pjDoneHtml() {
+  const sh = S.sheet, p = pjOf(S.pjId);
+  const again = p && p.status === 'done';
+  return band('#111111', '완료') + field('완료일', 'doneDate', sh.doneDate, 'date') + errLine(sh)
+    + `<div class="acts">${again ? '<button class="btn" data-act="pjReopen">다시 진행</button>' : '<button class="btn" data-act="close">취소</button>'}<button class="btn pri" data-act="pjDoneSave">${again ? '저장' : '완료'}</button></div>`;
+}
+function pjChooseHtml() {
+  const sh = S.sheet;
+  if (sh.what === 'notes') {
+    return band('#111111', '회의 · 메모') + `<button class="row" data-act="pjNoteNew" data-v="meeting">새 회의</button><button class="row" data-act="pjNoteNew" data-v="memo">새 메모</button><button class="row" data-act="pjNotePick">기존 회의 · 메모 담기</button>`;
+  }
+  const p = pjOf(S.pjId);
+  return band('#111111', '일정 · 할 일') + `<button class="row" data-act="pjItemNew">새 일정 · 할 일</button><button class="row" data-act="pjPick">기존 일정 담기</button>`
+    + (wide() && p ? `<button class="row" data-act="pjDone">${p.status === 'done' ? '완료일 바꾸기 · 다시 진행' : '완료로 바꾸기'}</button>` : '');
+}
+function pjPickHtml() {
+  const sh = S.sheet, p = pjOf(S.pjId);
+  let h = band('#111111', p ? p.name : '');
+  let rows;
+  if (sh.what === 'notes') {
+    rows = S.notes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((n) => ({ id: n.id, d: n.date, c: '#111111', t: `${n.kind === 'meeting' ? '[회의] ' : '[메모] '}${n.title || '(제목 없음)'}`, other: n.pj && n.pj !== S.pjId ? pjOf(n.pj) : null }));
+  } else {
+    h += `<div class="two"><div>${field('시작', 'from', sh.from, 'date')}</div><div>${field('끝', 'to', sh.to, 'date')}</div></div>`;
+    rows = S.items.filter((it) => it.start && it.start <= sh.to && (itemEnd(it) || it.start) >= sh.from)
+      .sort((a, b) => a.start.localeCompare(b.start)).map((it) => ({ id: it.id, d: it.start, c: colorOf(it), t: it.title || '(제목 없음)', other: it.pj && it.pj !== S.pjId ? pjOf(it.pj) : null }));
+  }
+  h += `<div class="pkl">${rows.map((r) => {
+    const on = sh.sel.has(r.id);
+    return r.other
+      ? `<div class="pk dis"><span class="bx"></span><span class="d">${md2(r.d)}</span><span class="sw" style="background:${r.c}"></span><span class="t">${esc(r.t)}</span><span class="o">${esc(r.other.name || '')}</span></div>`
+      : `<button class="pk" data-act="pkTog" data-id="${r.id}"><span class="bx ${on ? 'on' : ''}">${on ? IC.check : ''}</span><span class="d">${md2(r.d)}</span><span class="sw" style="background:${r.c}"></span><span class="t">${esc(r.t)}</span></button>`;
+  }).join('') || '<p class="muted" style="font-size:14px">이 기간에는 일정이 없어요.</p>'}</div>`;
+  return h + `<div class="acts"><button class="btn" data-act="close">취소</button><button class="btn pri" data-act="pkSave">담기</button></div>`;
+}
+function planHtml() {
+  const sh = S.sheet, x = sh.draft;
+  return bandIn('#111111', x.title) + field('시기', 'ym', x.ym, 'month') + area('비고', 'note', x.note, 110) + errLine(sh)
+    + `<div class="acts">${sh.isNew ? '' : `<button class="btn del" data-act="planDel">${S.delArm ? '정말 삭제' : '삭제'}</button>`}<button class="btn" data-act="planToItem">일정으로 올리기</button><button class="btn pri" data-act="planSave">저장</button></div>`;
+}
+function pjSelect(d) {
+  const opts = S.projects.filter((p) => p.status !== 'done' || p.id === d.pj).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  if (!opts.length && !d.pj) return '';
+  return `<span class="lb">플젝</span><select aria-label="플젝" data-f="pj" style="width:100%"><option value="">없음</option>${opts.map((p) => `<option value="${p.id}" ${p.id === d.pj ? 'selected' : ''}>${esc(p.name || '(이름 없음)')}</option>`).join('')}</select>`;
+}
+function savePj(p) { save('projects', p); }
+function setPj(col, obj, pjId) {
+  const x = { ...obj };
+  if (pjId) x.pj = pjId; else delete x.pj;
+  save(col, x);
+}
+const PJ_ACT = {
+  pjTab: (el) => { S.pjTab = el.dataset.v; render(); },
+  pjNew: () => openSheet({ kind: 'pjName', isNew: true, draft: { name: '' } }),
+  pjOpen: (el) => { S.pjId = el.dataset.id; S.view = 'pjd'; render(); window.scrollTo(0, 0); },
+  pjRename: () => { const p = pjOf(S.pjId); if (p) swapSheet({ kind: 'pjName', isNew: false, draft: { name: p.name } }); },
+  pjNameSave: () => {
+    const sh = S.sheet, name = (sh.draft.name || '').trim();
+    if (!name) { sh.err = '이름을 입력해 주세요.'; render(); return; }
+    if (sh.isNew) {
+      const p = { id: uid(), name, status: 'progress', doneDate: '', plans: [], memo: '', created: Date.now() };
+      S.projects = [...S.projects, p]; savePj(p); S.pjId = p.id; S.view = 'pjd'; closeSheet();
+    } else { const p = pjOf(S.pjId); if (p) savePj({ ...p, name }); closeSheet(); }
+  },
+  pjMenu: () => openSheet({ kind: 'pjMenu' }),
+  pjDone: () => {
+    const p = pjOf(S.pjId); if (!p) return;
+    const last = pjItems(p.id).map((x) => itemEnd(x) || x.start).sort().pop();
+    swapSheet({ kind: 'pjDone', doneDate: p.doneDate || (last && last > todayStr() ? last : todayStr()) });
+  },
+  pjDoneSave: () => {
+    const sh = S.sheet, p = pjOf(S.pjId);
+    if (!sh.doneDate) { sh.err = '완료일을 골라 주세요.'; render(); return; }
+    if (p) savePj({ ...p, status: 'done', doneDate: sh.doneDate });
+    closeSheet();
+  },
+  pjReopen: () => { const p = pjOf(S.pjId); if (p) savePj({ ...p, status: 'progress', doneDate: '' }); closeSheet(); },
+  pjDel: () => {
+    if (!armDel()) return;
+    const id = S.pjId;
+    // 묶음만 풀고 일정·메모는 그대로 둠
+    S.items.filter((x) => x.pj === id).forEach((x) => setPj('items', x, ''));
+    S.notes.filter((x) => x.pj === id).forEach((x) => setPj('notes', x, ''));
+    D.deleteDocIn(U(), 'projects', id);
+    S.view = 'proj'; closeSheet();
+  },
+  pjItemPlus: () => openSheet({ kind: 'pjChoose', what: 'items' }),
+  pjNotePlus: () => openSheet({ kind: 'pjChoose', what: 'notes' }),
+  pjItemNew: () => { const it = newItem('event', todayStr()); it.pj = S.pjId; swapSheet({ kind: 'edit', draft: it, isNew: true }); setTimeout(() => document.getElementById('bandT')?.focus(), 30); },
+  pjNoteNew: (el) => swapSheet({ kind: 'note', isNew: true, draft: { id: uid(), kind: el.dataset.v, title: '', date: todayStr(), time: '', place: '', attendees: '', content: '', linkId: '', pj: S.pjId, created: Date.now() } }),
+  pjPick: () => {
+    const its = pjItems(S.pjId);
+    const from = its[0]?.start ? addDays(its[0].start, -14) : addDays(todayStr(), -30);
+    const to = its.length ? addDays(its[its.length - 1].start, 30) : addDays(todayStr(), 30);
+    swapSheet({ kind: 'pjPick', what: 'items', from, to, sel: new Set(its.map((x) => x.id)), orig: new Set(its.map((x) => x.id)) });
+  },
+  pjNotePick: () => { const ns = pjNotes(S.pjId); swapSheet({ kind: 'pjPick', what: 'notes', sel: new Set(ns.map((x) => x.id)), orig: new Set(ns.map((x) => x.id)) }); },
+  pkTog: (el) => { const s = S.sheet.sel, id = el.dataset.id; if (s.has(id)) s.delete(id); else s.add(id); render(); },
+  pkSave: () => {
+    const sh = S.sheet, col = sh.what === 'notes' ? 'notes' : 'items', list = S[col];
+    list.forEach((x) => {
+      const want = sh.sel.has(x.id), had = sh.orig.has(x.id);
+      if (want && !had && (!x.pj || x.pj === S.pjId)) setPj(col, x, S.pjId);
+      if (!want && had && x.pj === S.pjId) setPj(col, x, '');
+    });
+    closeSheet();
+  },
+  planNew: () => openSheet({ kind: 'plan', isNew: true, draft: { id: uid(), title: '', ym: '', note: '' } }),
+  planOpen: (el) => { const p = pjOf(S.pjId), x = p && (p.plans || []).find((y) => y.id === el.dataset.id); if (x) openSheet({ kind: 'plan', isNew: false, draft: { ...x } }); },
+  planSave: () => {
+    const sh = S.sheet, x = { ...sh.draft }, p = pjOf(S.pjId);
+    x.title = (x.title || '').trim();
+    if (!x.title) { sh.err = '제목을 입력해 주세요.'; render(); return; }
+    if (!p) return closeSheet();
+    const plans = (p.plans || []).filter((y) => y.id !== x.id);
+    const i = (p.plans || []).findIndex((y) => y.id === x.id);
+    if (i >= 0) plans.splice(i, 0, x); else plans.push(x);
+    savePj({ ...p, plans }); closeSheet();
+  },
+  planDel: () => { if (!armDel()) return; const p = pjOf(S.pjId); if (p) savePj({ ...p, plans: (p.plans || []).filter((y) => y.id !== S.sheet.draft.id) }); closeSheet(); },
+  planToItem: () => {
+    const x = { ...S.sheet.draft };
+    x.title = (x.title || '').trim();
+    if (!x.title) { S.sheet.err = '제목을 입력해 주세요.'; render(); return; }
+    const d = x.ym ? (x.ym === todayStr().slice(0, 7) ? todayStr() : `${x.ym}-01`) : todayStr();
+    const it = newItem('event', d);
+    it.title = x.title; it.memo = x.note || ''; it.pj = S.pjId; it.fromPlan = x.id;
+    swapSheet({ kind: 'edit', draft: it, isNew: true });
+  },
+};
+// 일정이 저장되면 그 일정으로 올린 향후 계획은 목록에서 뺌
+function afterItemSaved(it) {
+  if (!it.fromPlan) return it;
+  const p = pjOf(it.pj);
+  if (p) savePj({ ...p, plans: (p.plans || []).filter((y) => y.id !== it.fromPlan) });
+  const { fromPlan, ...rest } = it;
+  return rest;
+}
+
 // ---------- 전체 그리기 ----------
 const ALL_LOADED = () => S.settings && D.COLS.every((c) => S.loaded[c]);
 function render() {
@@ -519,18 +731,18 @@ function render() {
   const keepId = active && active.id && $app.contains(active) ? active.id : null;
   const V = S.view;
   const page = V === 'month' ? monthHead() + monthBody() : V === 'week' ? weekHead() + weekBody() : V === 'mini' ? miniBody()
-    : V === 'year' ? yearBody() : V === 'ysum' ? ysumBody() : V === 'routine' ? routineBody() : settingsBody();
-  const navV = V === 'ysum' ? 'year' : V;
+    : V === 'year' ? yearBody() : V === 'ysum' ? ysumBody() : V === 'routine' ? routineBody() : V === 'proj' ? projBody() : V === 'pjd' ? pjDetailBody() : settingsBody();
+  const navV = V === 'ysum' ? 'year' : V === 'pjd' ? 'proj' : V;
   let html;
   if (wide()) {
     const mi = (v, l) => `<button class="mi ${navV === v ? 'on' : ''}" data-act="nav" data-v="${v}">${l}</button>`;
     const right = V === 'month' ? `<aside class="rpanel"><p class="dt ${dayClass(S.sel)}">${fmtMD(S.sel)}${HOLIDAYS[S.sel] ? ' · ' + HOLIDAYS[S.sel] : ''}</p><p class="dn">${parse(S.sel).getDate()}</p>${dayList(S.sel)}<button class="btn sm" style="margin-top:6px" data-act="newOn" data-d="${S.sel}">추가</button></aside>` : '';
-    html = `<div class="wide"><nav class="side">${mi('month', '먼슬리')}${mi('week', '위클리')}${mi('mini', '미니북')}${mi('year', '이어북')}${mi('routine', '루틴북')}<div class="grow"></div><button class="mi sync ${S.syncing ? 'spin' : ''}" data-act="sync">${IC.sync}<span>동기화</span><small>${S.syncAt ? fmtAt(S.syncAt).slice(11) : ''}</small></button><button class="mi set ${V === 'settings' ? 'on' : ''}" data-act="nav" data-v="settings">설정</button></nav><main class="main">${page}</main>${right}${sheetHtml()}</div>`;
+    html = `<div class="wide"><nav class="side">${mi('month', '먼슬리')}${mi('week', '위클리')}${mi('proj', '플젝북')}${mi('mini', '미니북')}${mi('year', '이어북')}${mi('routine', '루틴북')}<div class="grow"></div><button class="mi sync ${S.syncing ? 'spin' : ''}" data-act="sync">${IC.sync}<span>동기화</span><small>${S.syncAt ? fmtAt(S.syncAt).slice(11) : ''}</small></button><button class="mi set ${V === 'settings' ? 'on' : ''}" data-act="nav" data-v="settings">설정</button></nav><main class="main">${page}</main>${right}${sheetHtml()}</div>`;
   } else {
     const tab = (v, l) => `<button class="${navV === v ? 'on' : ''}" data-act="nav" data-v="${v}">${l}</button>`;
     const showFab = ['month', 'week'].includes(V);
     const fab = showFab ? `<button class="fab" aria-label="추가" data-act="fab">${IC.plus}</button>` : '';
-    html = `<div class="phone"><div class="page">${page}</div>${V !== 'settings' ? `<nav class="nav">${tab('month', '먼슬리')}${tab('week', '위클리')}${tab('mini', '미니북')}${tab('year', '이어북')}${tab('routine', '루틴북')}</nav>` : ''}${fab}${sheetHtml()}</div>`;
+    html = `<div class="phone"><div class="page">${page}</div>${V !== 'settings' ? `<nav class="nav">${tab('month', '먼슬리')}${tab('week', '위클리')}${tab('proj', '플젝북')}${tab('mini', '미니북')}${tab('year', '이어북')}${tab('routine', '루틴북')}</nav>` : ''}${fab}${sheetHtml()}</div>`;
   }
   if (S.toast) html += `<div class="toast">${esc(S.toast)}</div>`;
   $app.innerHTML = html;
@@ -568,7 +780,7 @@ const save = (name, obj) => { try { D.saveDoc(U(), name, obj); } catch (e) { toa
 const armDel = () => { if (!S.delArm) { S.delArm = true; render(); return false; } return true; };
 
 function snapshot() {
-  return { items: S.items, notes: S.notes, records: S.records, routines: S.routines, yb: S.yb, settings: S.settings };
+  return { items: S.items, notes: S.notes, records: S.records, routines: S.routines, yb: S.yb, projects: S.projects, settings: S.settings };
 }
 async function ensureSettingsAndBackup() {
   const st = S.settings;
@@ -582,12 +794,12 @@ async function ensureSettingsAndBackup() {
   }
 }
 // ---------- 데이터 점검 · 합치기 복원 ----------
-const CK = [['ev', '일정'], ['td', '할 일'], ['mt', '회의'], ['mm', '메모'], ['rc', '기록'], ['rt', '루틴'], ['yb', '이어북 칠한 날'], ['ct', '분류 · 주제']];
-const ckKey = (name, o) => name === 'items' ? (o.type === 'todo' ? 'td' : 'ev') : name === 'notes' ? (o.kind === 'meeting' ? 'mt' : 'mm') : name === 'records' ? 'rc' : 'rt';
+const CK = [['ev', '일정'], ['td', '할 일'], ['pj', '플젝'], ['mt', '회의'], ['mm', '메모'], ['rc', '기록'], ['rt', '루틴'], ['yb', '이어북 칠한 날'], ['ct', '분류 · 주제']];
+const ckKey = (name, o) => name === 'items' ? (o.type === 'todo' ? 'td' : 'ev') : name === 'notes' ? (o.kind === 'meeting' ? 'mt' : 'mm') : name === 'records' ? 'rc' : name === 'projects' ? 'pj' : 'rt';
 const zeroC = () => Object.fromEntries(CK.map(([k]) => [k, 0]));
 function countsOf(d) {
   const c = zeroC();
-  ['items', 'notes', 'records', 'routines'].forEach((n) => (d[n] || []).forEach((o) => { c[ckKey(n, o)]++; }));
+  ['items', 'notes', 'records', 'routines', 'projects'].forEach((n) => (d[n] || []).forEach((o) => { c[ckKey(n, o)]++; }));
   (d.yb || []).forEach((y) => { c.yb += (y.days || []).length; });
   const st = d.settings || {};
   c.ct = (st.cats || []).length + (st.topics || []).length;
@@ -615,14 +827,36 @@ function labelOf(name, o) {
   if (name === 'items') return `${(o.start || '').replace(/-/g, '.')} ${o.title || '(제목 없음)'}`;
   if (name === 'notes') return `${(o.date || '').replace(/-/g, '.')} ${o.title || '(제목 없음)'}`;
   if (name === 'records') return `${RK[o.kind] || '기록'} ${o.name || o.year || ''}`;
+  if (name === 'projects') return `플젝 ${o.name || ''}`;
   return `루틴 ${o.title || ''}`;
 }
 // 지금(cur)에 파일(file)을 합치는 계획. 지금 있는 것은 그대로 둠
 function planMerge(cur, file) {
-  const plan = { add: {}, yb: [], settings: null };
-  ['items', 'notes', 'records', 'routines'].forEach((n) => {
+  const plan = { add: {}, yb: [], upd: [], settings: null };
+  ['items', 'notes', 'records', 'routines', 'projects'].forEach((n) => {
     const ids = new Set((cur[n] || []).map((o) => o.id));
     plan.add[n] = file[n].filter((o) => !ids.has(o.id));
+  });
+  // 같은 항목이 이미 있으면 바꾸지 않고, 지금 없는 칸(예: 플젝 연결)만 채움
+  ['items', 'notes', 'records', 'routines'].forEach((n) => {
+    const cm = new Map((cur[n] || []).map((o) => [o.id, o]));
+    file[n].forEach((o) => {
+      const c = cm.get(o.id);
+      if (!c) return;
+      const fill = {};
+      Object.keys(o).forEach((k) => { if (k !== 'updated' && !(k in c) && o[k] !== undefined && o[k] !== '') fill[k] = o[k]; });
+      if (Object.keys(fill).length) plan.upd.push({ name: n, before: c, after: { ...c, ...fill } });
+    });
+  });
+  // 같은 플젝이 이미 있으면 빠진 향후 계획만 채우고, 비어 있는 메모만 채움
+  const pjCur = new Map((cur.projects || []).map((p) => [p.id, p]));
+  file.projects.forEach((fp) => {
+    const c = pjCur.get(fp.id);
+    if (!c) return;
+    const have = new Set((c.plans || []).map((x) => x.id));
+    const more = (fp.plans || []).filter((x) => x && !have.has(x.id));
+    const memo = !c.memo && fp.memo ? fp.memo : c.memo;
+    if (more.length || memo !== c.memo) plan.upd.push({ name: 'projects', before: c, after: { ...c, plans: [...(c.plans || []), ...more], memo: memo || '' } });
   });
   const ybCur = new Map((cur.yb || []).map((y) => [y.id, y]));
   plan.add.yb = [];
@@ -654,10 +888,12 @@ function planMerge(cur, file) {
 // 파일의 모든 항목이 지금(after)에 있는지 하나씩 확인
 function verifyMerge(file, after) {
   const got = zeroC(), missing = [];
-  ['items', 'notes', 'records', 'routines'].forEach((n) => {
+  ['items', 'notes', 'records', 'routines', 'projects'].forEach((n) => {
     const ids = new Set((after[n] || []).map((o) => o.id));
     file[n].forEach((o) => { if (ids.has(o.id)) got[ckKey(n, o)]++; else missing.push(labelOf(n, o)); });
   });
+  const pjA = new Map((after.projects || []).map((p) => [p.id, new Set((p.plans || []).map((x) => x.id))]));
+  file.projects.forEach((fp) => { const set = pjA.get(fp.id); if (!set) return; (fp.plans || []).forEach((x) => { if (x && !set.has(x.id)) missing.push(`향후 계획 ${x.title || ''}`); }); });
   const ybA = new Map((after.yb || []).map((y) => [y.id, new Set(y.days || [])]));
   const topicName = (id) => ((after.settings || {}).topics || []).find((t) => t.id === id)?.name || '이어북';
   file.yb.forEach((y) => {
@@ -699,7 +935,7 @@ async function refreshCheckStatus() {
 }
 function ckTable(h1, h2, a, b, mark) {
   return `<table class="ck"><thead><tr><th></th><th>${h1}</th><th>${h2}</th><th></th></tr></thead><tbody>${CK.map(([k, l]) => {
-    const x = a[k] || 0, y = b[k] || 0;
+    const x = a[k] || 0, y = b ? b[k] || 0 : '';
     const m = mark ? mark(x, y) : '';
     return `<tr class="${m === 'no' ? 'bad' : ''}"><td>${l}</td><td>${x}</td><td>${y}</td><td class="${m}">${m === 'ok' ? '✓' : m === 'no' ? '!' : m === 'up' ? '+' + (x - y) : ''}</td></tr>`;
   }).join('')}</tbody></table>`;
@@ -710,7 +946,7 @@ function checkHtml() {
   let h = band('#111111', '데이터 점검');
   if (sh.busy || !sh.r) return h + '<p class="muted" style="font-size:14px;margin-top:14px">확인하는 중</p>';
   const r = sh.r;
-  if (!r.bk) return h + `<div class="st">아직 백업이 없어요</div>${ckTable('지금', '', r.nowC, {}, () => '')}<div class="acts"><button class="btn" data-act="close">닫기</button><button class="btn pri" data-act="ckBackup">지금 백업</button></div>`;
+  if (!r.bk) return h + `<div class="st">아직 백업이 없어요</div>${ckTable('지금', '', r.nowC, null, () => '')}<div class="acts"><button class="btn" data-act="close">닫기</button><button class="btn pri" data-act="ckBackup">지금 백업</button></div>`;
   const st = r.same ? '<div class="st ok"><i></i>모두 일치</div>' : r.less ? `<div class="st bad"><i></i>백업보다 줄어든 항목이 있어요</div>` : '<div class="st ok"><i></i>줄어든 항목 없음</div>';
   h += st + ckTable('지금', '최근 백업', r.nowC, r.bkC, (x, y) => x === y ? 'ok' : x < y ? 'no' : 'up');
   h += `<p class="meta">최근 백업 ${fmtAt(r.bk.at)}${r.bk.ver ? ' · v' + esc(r.bk.ver) : ''}</p>`;
@@ -760,7 +996,7 @@ async function doImport() {
   render();
 }
 function mergePlans(a, b) {
-  const out = { add: {}, yb: [...(a.yb || []), ...(b.yb || [])], settings: a.settings || b.settings };
+  const out = { add: {}, yb: [...(a.yb || []), ...(b.yb || [])], upd: [...(a.upd || []), ...(b.upd || [])], settings: a.settings || b.settings };
   if (a.settings && b.settings) out.settings = { before: a.settings.before, after: b.settings.after };
   D.COLS.forEach((n) => { out.add[n] = [...(a.add[n] || []), ...(b.add[n] || [])]; });
   return out;
@@ -954,7 +1190,8 @@ const ACT = {
     if (!it.title) { sh.err = '제목을 입력해 주세요.'; render(); return; }
     if (!it.start) { sh.err = '날짜를 골라 주세요.'; render(); return; }
     if (it.type === 'event') { if (!it.end || it.end < it.start) it.end = it.start; } else { delete it.end; delete it.yb; }
-    save('items', it); closeSheet();
+    if (!it.pj) delete it.pj;
+    save('items', afterItemSaved(it)); closeSheet();
   },
   delItem: () => { if (!armDel()) return; D.deleteDocIn(U(), 'items', S.sheet.draft.id); closeSheet(); },
 
@@ -964,7 +1201,7 @@ const ACT = {
   noteFrom: (el) => {
     const it = S.sheet.draft;
     const m = /^\s*(\d{1,2}:\d{2})\s*(.*)$/.exec(it.title || '');
-    swapSheet({ kind: 'note', isNew: true, back: { ...S.sheet }, draft: { id: uid(), kind: el.dataset.v, title: m ? m[2] : it.title, date: it.start, time: m ? m[1] : '', place: '', attendees: '', content: '', linkId: it.id, created: Date.now() } });
+    swapSheet({ kind: 'note', isNew: true, back: { ...S.sheet }, draft: { id: uid(), kind: el.dataset.v, title: m ? m[2] : it.title, date: it.start, time: m ? m[1] : '', place: '', attendees: '', content: '', linkId: it.id, ...(it.pj ? { pj: it.pj } : {}), created: Date.now() } });
   },
   openNote: (el) => { const n = S.notes.find((x) => x.id === el.dataset.id); if (n) swapSheet({ kind: 'note', isNew: false, draft: { ...n } }); },
   unlink: () => { S.sheet.draft.linkId = ''; render(); },
@@ -972,6 +1209,7 @@ const ACT = {
     const sh = S.sheet, n = { ...sh.draft };
     n.title = (n.title || '').trim();
     if (!n.title) { sh.err = '제목을 입력해 주세요.'; render(); return; }
+    if (!n.pj) delete n.pj;
     save('notes', n);
     if (sh.back) { const it = findItem(sh.back.draft.id); swapSheet({ ...sh.back, draft: it ? { ...it, ...sh.back.draft } : sh.back.draft }); } else closeSheet();
   },
@@ -1125,6 +1363,8 @@ const ACT = {
   logout: () => { D.logout(); },
 };
 
+Object.assign(ACT, PJ_ACT);
+
 // ---------- 입력 ----------
 $app.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');
@@ -1149,6 +1389,8 @@ function setField(el, live) {
     return false;
   }
   if (sh.kind === 'xlsx') { sh[f] = el.value; return false; }
+  if (sh.kind === 'pjPick') { sh[f] = el.value; return !live; }
+  if (sh.kind === 'pjDone') { sh[f] = el.value; return false; }
   d[f] = el.value;
   if ((f === 'title' || f === 'name') && el.id !== 'bandT') { const b = document.getElementById('bandT'); if (b && b.tagName !== 'INPUT') b.textContent = el.value || ' '; }
   if (live) return false;
@@ -1171,6 +1413,11 @@ $app.addEventListener('change', async (e) => {
       openImport(normalizeData(raw), el.files[0].name, at);
     } catch (err) { toast('백업 파일을 읽지 못했어요'); }
     el.value = '';
+    return;
+  }
+  if (el.dataset.pjmemo) {
+    const p = pjOf(S.pjId);
+    if (p && (p.memo || '') !== el.value) savePj({ ...p, memo: el.value });
     return;
   }
   if (el.dataset.ybmemo) {
@@ -1224,7 +1471,11 @@ D.onUser((user) => {
       if (!st) { const d = DEFAULT_SETTINGS(); S.settings = d; D.saveSettings(user.uid, d); }
       else S.settings = { todoColor: '#CFCFCF', cats: [], topics: [], ...st };
       check(); render(); bridgeRefresh();
-    }, (err) => { console.error(err); toast('데이터를 불러오지 못했어요'); });
+    }, (err, name) => {
+      console.error(err);
+      if (name && !S.loaded[name]) { S.loaded[name] = true; render(); }
+      toast(name === 'projects' ? '플젝북을 불러오지 못했어요' : '데이터를 불러오지 못했어요');
+    });
   }
   render();
 });

@@ -37,13 +37,13 @@ export const resetPw = (email) => sendPasswordResetEmail(auth, email);
 export const logout = () => signOut(auth);
 
 // 데이터 묶음: items(일정·할 일), notes(회의·메모), records(기록), routines(루틴), yb(이어북)
-export const COLS = ['items', 'notes', 'records', 'routines', 'yb'];
+export const COLS = ['items', 'notes', 'records', 'routines', 'yb', 'projects'];
 const col = (uid, name) => collection(db, 'users', uid, name);
 const settingsDoc = (uid) => doc(db, 'users', uid, 'meta', 'settings');
 
 // onData(name, list), onSettings(obj|null)
 export function watch(uid, onData, onSettings, onError) {
-  const subs = COLS.map((name) => onSnapshot(col(uid, name), (snap) => onData(name, snap.docs.map((d) => ({ id: d.id, ...d.data() }))), onError));
+  const subs = COLS.map((name) => onSnapshot(col(uid, name), (snap) => onData(name, snap.docs.map((d) => ({ id: d.id, ...d.data() }))), (e) => onError(e, name)));
   subs.push(onSnapshot(settingsDoc(uid), (snap) => onSettings(snap.exists() ? snap.data() : null), onError));
   return () => subs.forEach((u) => u());
 }
@@ -122,6 +122,7 @@ export async function applyMerge(uid, plan) {
   const ops = [];
   for (const name of COLS) (plan.add[name] || []).forEach((o) => ops.push((b) => b.set(doc(db, 'users', uid, name, o.id), strip(o))));
   (plan.yb || []).forEach(({ after }) => ops.push((b) => b.set(doc(db, 'users', uid, 'yb', after.id), strip(after))));
+  (plan.upd || []).forEach(({ name, after }) => ops.push((b) => b.set(doc(db, 'users', uid, name, after.id), strip(after))));
   if (plan.settings) ops.push((b) => b.set(settingsDoc(uid), plan.settings.after));
   await runOps(ops);
 }
@@ -129,6 +130,7 @@ export async function undoMerge(uid, plan) {
   const ops = [];
   for (const name of COLS) (plan.add[name] || []).forEach((o) => ops.push((b) => b.delete(doc(db, 'users', uid, name, o.id))));
   (plan.yb || []).forEach(({ before }) => ops.push((b) => b.set(doc(db, 'users', uid, 'yb', before.id), strip(before))));
+  (plan.upd || []).forEach(({ name, before }) => ops.push((b) => b.set(doc(db, 'users', uid, name, before.id), strip(before))));
   if (plan.settings) ops.push((b) => b.set(settingsDoc(uid), plan.settings.before));
   await runOps(ops);
 }

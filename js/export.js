@@ -23,6 +23,13 @@ function sheet(X, rows, headers, widths) {
 }
 
 export function downloadBlob(name, blob) {
+  // 안드로이드 앱 안에서는 앱이 직접 다운로드 폴더에 저장
+  if (window.PlanbookBridge && window.PlanbookBridge.saveFile) {
+    const r = new FileReader();
+    r.onload = () => window.PlanbookBridge.saveFile(String(r.result).split(',')[1] || '', name, blob.type || 'application/octet-stream');
+    r.readAsDataURL(blob);
+    return;
+  }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = name; document.body.appendChild(a); a.click(); a.remove();
@@ -34,7 +41,8 @@ export async function writeXlsx(fileName, sheets) {
   const X = await loadXLSX();
   const wb = X.utils.book_new();
   sheets.forEach((s) => X.utils.book_append_sheet(wb, sheet(X, s.rows, s.headers, s.widths), s.name));
-  X.writeFile(wb, fileName);
+  const out = X.write(wb, { type: 'array', bookType: 'xlsx' });
+  downloadBlob(fileName, new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
 }
 
 // ----- iCalendar (.ics) -----

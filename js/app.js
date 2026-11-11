@@ -7,7 +7,7 @@ import {
 import { occItems, occDates, nextOcc, ruleText, lunarToSolar } from './routine.js';
 import { writeXlsx, buildIcs, downloadBlob, stampName } from './export.js';
 
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.2.0';
 
 const IC = {
   l: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M15 6l-6 6 6 6"/></svg>',
@@ -933,19 +933,40 @@ window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(rend
 let lastDay = todayStr();
 setInterval(() => { if (todayStr() !== lastDay) { lastDay = todayStr(); render(); } }, 60000);
 
+// 안드로이드 앱(위젯)과 연결
+const BR = window.PlanbookBridge || null;
+let brT;
+const bridgeRefresh = () => { if (!BR) return; clearTimeout(brT); brT = setTimeout(() => { try { BR.refresh(); } catch (e) { /* 무시 */ } }, 1500); };
+function openAt(d, v) {
+  if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) { S.sel = d; const t = parse(d); S.month = [t.getFullYear(), t.getMonth()]; }
+  if (v && ['month', 'week', 'mini', 'year', 'routine'].includes(v)) S.view = v;
+  if (S.sheet) closeSheet(); else render();
+}
+window.__pbOpen = openAt;
+{
+  const q = new URLSearchParams(location.search);
+  if (q.get('d') || q.get('v')) {
+    const d = q.get('d'), v = q.get('v');
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) { S.sel = d; const t = parse(d); S.month = [t.getFullYear(), t.getMonth()]; }
+    if (v && ['month', 'week', 'mini', 'year', 'routine'].includes(v)) S.view = v;
+    history.replaceState(null, '', location.pathname);
+  }
+}
+
 D.onUser((user) => {
   if (unwatch) { unwatch(); unwatch = null; }
+  if (BR) { try { if (user) BR.setAuth(user.refreshToken, user.uid); else BR.clearAuth(); } catch (e) { /* 무시 */ } }
   S.user = user || null; S.settings = null; S.loaded = {}; S.sheet = null;
   D.COLS.forEach((c) => { S[c] = []; });
   if (user) {
     let first = true;
     const check = () => { if (first && ALL_LOADED()) { first = false; ensureSettingsAndBackup(); } };
     unwatch = D.watch(user.uid, (name, list) => {
-      S[name] = list; S.loaded[name] = true; check(); render();
+      S[name] = list; S.loaded[name] = true; check(); render(); bridgeRefresh();
     }, (st) => {
       if (!st) { const d = DEFAULT_SETTINGS(); S.settings = d; D.saveSettings(user.uid, d); }
       else S.settings = { todoColor: '#CFCFCF', cats: [], topics: [], ...st };
-      check(); render();
+      check(); render(); bridgeRefresh();
     }, (err) => { console.error(err); toast('데이터를 불러오지 못했어요'); });
   }
   render();

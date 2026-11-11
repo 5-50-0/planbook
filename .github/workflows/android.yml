@@ -1,0 +1,35 @@
+name: 안드로이드 설치 파일
+
+on:
+  push:
+    branches: [main]
+    paths: ['android/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: 설치 파일 만들기
+        working-directory: android
+        run: gradle :app:assembleRelease --no-daemon --stacktrace
+      - name: 이름 정리
+        run: cp android/app/build/outputs/apk/release/app-release.apk planbook.apk
+      - name: 릴리스에 올리기
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: app-${{ github.run_number }}
+          name: 플랜북 앱 ${{ github.run_number }}
+          make_latest: true
+          files: planbook.apk

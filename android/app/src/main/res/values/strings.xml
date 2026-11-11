@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">플랜북</string>
+    <string name="w_month">플랜북 월간</string>
+    <string name="w_today">플랜북 오늘</string>
+</resources>

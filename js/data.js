@@ -35,28 +35,30 @@ export const signup = (email, pw) => createUserWithEmailAndPassword(auth, email,
 export const resetPw = (email) => sendPasswordResetEmail(auth, email);
 export const logout = () => signOut(auth);
 
-const itemsCol = (uid) => collection(db, 'users', uid, 'items');
+// 데이터 묶음: items(일정·할 일), notes(회의·메모), records(기록), routines(루틴), yb(이어북)
+export const COLS = ['items', 'notes', 'records', 'routines', 'yb'];
+const col = (uid, name) => collection(db, 'users', uid, name);
 const settingsDoc = (uid) => doc(db, 'users', uid, 'meta', 'settings');
-const backupsCol = (uid) => collection(db, 'users', uid, 'backups');
 
-export function watch(uid, onItems, onSettings, onError) {
-  const u1 = onSnapshot(itemsCol(uid), (snap) => onItems(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), onError);
-  const u2 = onSnapshot(settingsDoc(uid), (snap) => onSettings(snap.exists() ? snap.data() : null), onError);
-  return () => { u1(); u2(); };
+// onData(name, list), onSettings(obj|null)
+export function watch(uid, onData, onSettings, onError) {
+  const subs = COLS.map((name) => onSnapshot(col(uid, name), (snap) => onData(name, snap.docs.map((d) => ({ id: d.id, ...d.data() }))), onError));
+  subs.push(onSnapshot(settingsDoc(uid), (snap) => onSettings(snap.exists() ? snap.data() : null), onError));
+  return () => subs.forEach((u) => u());
 }
 
-export function saveItem(uid, item) {
-  const { id, ...rest } = item;
-  return setDoc(doc(db, 'users', uid, 'items', id), { ...rest, updated: Date.now() });
+export function saveDoc(uid, name, obj) {
+  const { id, ...rest } = obj;
+  return setDoc(doc(db, 'users', uid, name, id), { ...rest, updated: Date.now() });
 }
-export const deleteItem = (uid, id) => deleteDoc(doc(db, 'users', uid, 'items', id));
+export const deleteDocIn = (uid, name, id) => deleteDoc(doc(db, 'users', uid, name, id));
 export const saveSettings = (uid, s) => setDoc(settingsDoc(uid), s);
 
-// 백업: Firestore 안에 사본 저장 (최근 10개 유지)
-export async function backupNow(uid, items, settings, reason, ver) {
+// 백업: Firestore 안에 사본 저장 (최근 10개 유지). data = {items, notes, ..., settings}
+export async function backupNow(uid, data, reason, ver) {
   const id = String(Date.now());
-  await setDoc(doc(db, 'users', uid, 'backups', id), { at: Date.now(), reason, ver, items, settings: settings || null });
-  const snap = await getDocs(query(backupsCol(uid), orderBy('at', 'desc')));
+  await setDoc(doc(db, 'users', uid, 'backups', id), { at: Date.now(), reason, ver, ...data });
+  const snap = await getDocs(query(col(uid, 'backups'), orderBy('at', 'desc')));
   const old = snap.docs.slice(10);
   if (old.length) {
     const b = writeBatch(db);
@@ -66,18 +68,21 @@ export async function backupNow(uid, items, settings, reason, ver) {
 }
 
 export async function listBackups(uid) {
-  const snap = await getDocs(query(backupsCol(uid), orderBy('at', 'desc'), limit(10)));
+  const snap = await getDocs(query(col(uid, 'backups'), orderBy('at', 'desc'), limit(10)));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
 // 복원: 지금 데이터를 모두 지우고 백업 내용으로 바꿈
-export async function restoreAll(uid, currentItems, data) {
+export async function restoreAll(uid, current, data) {
   const ops = [];
-  currentItems.forEach((it) => ops.push((b) => b.delete(doc(db, 'users', uid, 'items', it.id))));
-  (data.items || []).forEach((it) => {
-    const { id, ...rest } = it;
-    ops.push((b) => b.set(doc(db, 'users', uid, 'items', id), rest));
-  });
+  for (const name of COLS) {
+    if (!Array.isArray(data[name])) continue;
+    (current[name] || []).forEach((it) => ops.push((b) => b.delete(doc(db, 'users', uid, name, it.id))));
+    data[name].forEach((it) => {
+      const { id, ...rest } = it;
+      ops.push((b) => b.set(doc(db, 'users', uid, name, id), rest));
+    });
+  }
   if (data.settings) ops.push((b) => b.set(settingsDoc(uid), data.settings));
   for (let i = 0; i < ops.length; i += 400) {
     const b = writeBatch(db);

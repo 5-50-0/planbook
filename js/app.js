@@ -7,7 +7,7 @@ import {
 import { occItems, occDates, nextOcc, ruleText, lunarToSolar } from './routine.js';
 import { writeXlsx, buildIcs, downloadBlob, stampName } from './export.js';
 
-export const APP_VERSION = '1.5.1';
+export const APP_VERSION = '1.5.2';
 
 const NI = {
   month: '<rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M8 2.5v4M16 2.5v4"/><circle cx="8" cy="14" r=".6"/><circle cx="12" cy="14" r=".6"/><circle cx="16" cy="14" r=".6"/><circle cx="8" cy="17.3" r=".6"/><circle cx="12" cy="17.3" r=".6"/>',
@@ -400,7 +400,7 @@ function bdList(today) {
     let sub = `${r.lunar ? '음력' : '양력'} ${mm}월 ${dd}일`;
     if (r.lunar && nx) sub += ` · ${nx.slice(0, 4) === today.slice(0, 4) ? '올해' : '내년'} ${+nx.slice(5, 7)}.${+nx.slice(8, 10)}`;
     const age = r.byear && nx ? `${+nx.slice(0, 4) - +r.byear}번째` : '';
-    return `<button class="bd" data-act="bdOpen" data-id="${r.id}"><span class="dd ${days === 0 ? 'today' : ''}">${dl}</span><span class="bdt"><b>${esc(bdName(r))}</b><small>${sub}</small></span><span class="age">${age}</span></button>`;
+    return `<button class="bdrow" data-act="bdOpen" data-id="${r.id}"><span class="dd ${days === 0 ? 'today' : ''}">${dl}</span><span class="bdt"><b>${esc(bdName(r))}</b><small>${sub}</small></span><span class="age">${age}</span></button>`;
   }).join('');
 }
 function bdHtml() {

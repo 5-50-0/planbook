@@ -352,13 +352,13 @@ table.sal tr.co td{background:#F4F4F4;font-weight:500;font-size:12px;color:#111;
 
 /* 끝난 루틴 · 생일 */
 .endsec .card{opacity:.55}
-.bd{display:flex;align-items:center;gap:12px;padding:12px 2px;border-bottom:1px solid #E6E6E6;width:100%;text-align:left}
-.bd .dd{width:56px;flex:none;text-align:center;font-size:13px;font-weight:700;border:1.5px solid #111;padding:4px 0}
-.bd .dd.today{background:#111;color:#fff}
-.bd .bdt{min-width:0}
-.bd b{font-size:15px;font-weight:500;display:block}
-.bd small{font-size:12px;color:#6B6B6B}
-.bd .age{margin-left:auto;font-size:13px;color:#6B6B6B;flex:none}
+.bdrow{display:flex;align-items:center;gap:12px;padding:12px 2px;border-bottom:1px solid #E6E6E6;width:100%;text-align:left}
+.bdrow .dd{width:56px;flex:none;text-align:center;font-size:13px;font-weight:700;border:1.5px solid #111;padding:4px 0}
+.bdrow .dd.today{background:#111;color:#fff}
+.bdrow .bdt{min-width:0}
+.bdrow b{font-size:15px;font-weight:500;display:block}
+.bdrow small{font-size:12px;color:#6B6B6B}
+.bdrow .age{margin-left:auto;font-size:13px;color:#6B6B6B;flex:none}
 
 /* 날짜 목록 할 일: 체크박스 */
 .tdr{display:flex;align-items:flex-start;gap:8px;margin:0 0 7px;padding:4px 2px}

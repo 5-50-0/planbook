@@ -64,6 +64,8 @@ class Model(data: JSONObject?) {
     private fun lunarToSolar(y: Int, m: Int, d: Int): List<LocalDate> {
         val key = "$y-$m-$d"
         lunarCache[key]?.let { return it }
+        // 1950~2050년은 한국천문연구원 표로 (중국 음력과 하루씩 다른 해가 있어서)
+        if (KrLunar.has(y - 1) && KrLunar.has(y)) { val r = KrLunar.inYear(y, m, d); lunarCache[key] = r; return r }
         fun find(dd: Int): List<LocalDate> {
             val res = ArrayList<LocalDate>()
             val cc = ChineseCalendar()
@@ -128,7 +130,8 @@ class Model(data: JSONObject?) {
             for (d in occDates(o, f2, t2)) {
                 val shown = mv?.optString(d.toString(), "")?.let { s -> if (s.isEmpty()) null else try { LocalDate.parse(s) } catch (e: Exception) { null } } ?: d
                 if (shown.isBefore(from) || shown.isAfter(to)) continue
-                out.add(Ev("r~" + o.optString("id") + "~" + d, kind, o.optString("title"), shown, shown,
+                val bday = o.optBoolean("bday", false)
+                out.add(Ev("r~" + o.optString("id") + "~" + d, if (bday) "event" else kind, if (bday) o.optString("title") + " 생일" else o.optString("title"), shown, shown,
                     colorOf(kind, o.optString("cat"), o.optString("sub")),
                     stMap?.optString(d.toString(), "progress")?.ifEmpty { "progress" } ?: "progress", true, o.optLong("created", 0)))
             }

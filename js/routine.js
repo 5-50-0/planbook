@@ -1,15 +1,22 @@
 // 루틴(반복) 계산과 음력 변환
 import { ymd, parse, addDays } from './util.js';
+import { krLunar, hasKrLunar } from './lunar.js';
 
 const lunarCache = new Map();
 let lunarFmt = null;
 try { lunarFmt = new Intl.DateTimeFormat('en-u-ca-chinese', { month: 'numeric', day: 'numeric' }); } catch (e) { lunarFmt = null; }
 
 // 양력 연도 y 안에서 음력 m월 d일에 해당하는 양력 날짜들
+// 양력 y년 안에 있는 음력 m월 d일 날짜들. 1950~2050년은 한국천문연구원 표로, 그 밖은 브라우저 계산으로
 export function lunarToSolar(y, m, d) {
   const key = `${y}-${m}-${d}`;
   if (lunarCache.has(key)) return lunarCache.get(key);
   const out = [];
+  if (hasKrLunar(y - 1) && hasKrLunar(y)) {
+    [y - 1, y].forEach((ly) => { const s = krLunar(ly, m, d); if (s && s.startsWith(String(y))) out.push(s); });
+    lunarCache.set(key, out);
+    return out;
+  }
   if (lunarFmt) {
     const find = (dd) => {
       const res = [];
@@ -86,7 +93,7 @@ export function occItems(routines, from, to) {
       const shown = mv[d] || d;
       if (shown < from || shown > to) continue;
       out.push({
-        id: `r~${rt.id}~${d}`, routine: rt.id, type: rt.kind || 'event', title: rt.title, start: shown, end: shown, sched: d,
+        id: `r~${rt.id}~${d}`, routine: rt.id, type: rt.bday ? 'event' : (rt.kind || 'event'), title: rt.bday ? `${rt.title} 생일` : rt.title, start: shown, end: shown, sched: d,
         cat: rt.cat, sub: rt.sub, memo: rt.memo || '', status: (rt.st && rt.st[d]) || 'progress', created: rt.created || 0,
       });
     }

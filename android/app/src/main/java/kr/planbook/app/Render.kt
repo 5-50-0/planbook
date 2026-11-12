@@ -38,7 +38,7 @@ object Render {
     }
 
     private fun dayColor(d: LocalDate): Int = when {
-        Holidays.MAP.containsKey(d.toString()) -> RED
+        Holidays.has(d) -> RED
         d.dayOfWeek.value == 7 -> RED
         d.dayOfWeek.value == 6 -> BLUE
         else -> INK
@@ -181,7 +181,7 @@ object Render {
         val ic = 18 * dp
         syncIcon(cv, w - pad - ic + 2 * dp, pad - 1 * dp, ic, INK)
         cv.drawText("플랜북", w - pad - ic - 4 * dp - brand.measureText("플랜북"), pad + 13 * dp, brand)
-        val hol = Holidays.MAP[today.toString()]
+        val hol = Holidays.name(today)
         if (hol != null) cv.drawText(hol, pad + hp.measureText(title) + 6 * dp, pad + 13 * dp, p(RED, 10 * dp))
 
         val list = m.onDay(m.all(today, today), today, today)

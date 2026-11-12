@@ -7,7 +7,7 @@ import {
 import { occItems, occDates, nextOcc, ruleText, lunarToSolar } from './routine.js';
 import { writeXlsx, buildIcs, downloadBlob, stampName } from './export.js';
 
-export const APP_VERSION = '1.4.3';
+export const APP_VERSION = '1.5.0';
 
 const NI = {
   month: '<rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M8 2.5v4M16 2.5v4"/><circle cx="8" cy="14" r=".6"/><circle cx="12" cy="14" r=".6"/><circle cx="16" cy="14" r=".6"/><circle cx="8" cy="17.3" r=".6"/><circle cx="12" cy="17.3" r=".6"/>',
@@ -46,7 +46,7 @@ const DEFAULT_SETTINGS = () => ({
 });
 
 const S = {
-  user: undefined, items: [], notes: [], records: [], routines: [], yb: [], projects: [], settings: null, pjTab: 'progress', pjId: null,
+  rtTab: 'rt', user: undefined, items: [], notes: [], records: [], routines: [], yb: [], projects: [], settings: null, pjTab: 'progress', pjId: null,
   loaded: {}, view: 'month', sel: todayStr(), month: null,
   loginView: 'login', loginErr: '', loginMsg: '', busy: false,
   sheet: null, acc: { cats: false, topics: false, data: false, acct: false },
@@ -142,6 +142,7 @@ const PLUS = (a='fab') => `<button class="ico plus" aria-label="추가" data-act
 const titleHead = (t, tools = '') => `<div class="head"><div class="big"><h1 class="word">${t}</h1></div>${tools || headTools()}</div>`;
 
 // ---------- 먼슬리 ----------
+const HOL_SHORT = { 대체공휴일: '대체', 부처님오신날: '부처님', 국회의원선거: '총선', 대통령선거: '대선', 지방선거: '선거', 임시공휴일: '임시' };
 function monthHead() {
   const [y, m] = S.month;
   return `<div class="head"><div class="big"><h1>${m + 1}</h1><div class="sub"><p class="y">${y}</p><p class="m">${EN_MONTH[m]}</p></div></div>${headTools('mPrev', 'mNext')}</div>`;
@@ -165,7 +166,7 @@ function monthBody() {
     h += `<div class="wk" style="grid-template-rows:${topH}px repeat(${maxL},${laneH - 2}px)">`;
     days.forEach((d, i) => {
       const cls = ['cell', dayClass(d), parse(d).getMonth() !== m ? 'other' : '', d === today ? 'today' : '', W && d === S.sel ? 'sel' : ''].join(' ');
-      const hol = HOLIDAYS[d] && W ? `<span class="hn">${HOLIDAYS[d]}</span>` : '';
+      const hol = HOLIDAYS[d] ? `<span class="hn">${W ? HOLIDAYS[d] : (HOL_SHORT[HOLIDAYS[d]] || HOLIDAYS[d])}</span>` : '';
       const more = hidden[i] ? `<span class="more" data-act="daySheet" data-d="${d}">+${hidden[i]}</span>` : '';
       h += `<button class="${cls}" style="grid-column:${i + 1}" data-act="addOn" data-d="${d}" aria-label="${fmtMD(d)} 새 일정"><span class="n">${parse(d).getDate()}</span>${hol}${more}</button>`;
     });
@@ -344,19 +345,80 @@ function ysumBody() {
 // ---------- 루틴북 ----------
 function routineBody() {
   const today = todayStr();
-  let h = titleHead('루틴북', headTools(null, null, { plus: 'fab' })) + '<div class="pad">';
+  const tab = (k, l) => `<button class="tab ${S.rtTab === k ? 'on' : ''}" data-act="rtTab" data-v="${k}">${l}</button>`;
+  let h = titleHead('루틴북', headTools(null, null, { plus: S.rtTab === 'bd' ? 'bdNew' : 'fab' })) + `<div class="pad"><div class="tabs">${tab('rt', '루틴')}${tab('bd', '생일')}</div>`;
+  if (S.rtTab === 'bd') return h + bdList(today) + '</div>';
+  const cardOf = (r) => {
+    const c = colorOf({ type: r.kind, cat: r.cat, sub: r.sub });
+    const nx = nextOcc(r, today);
+    return `<button class="card" style="${sty(c)}" data-act="rtOpen" data-id="${r.id}"><div class="ch"><span class="tt">${esc(r.title)}</span></div><div class="cm rr"><span>${esc(ruleText(r))}</span><span class="muted">${nx ? `다음 ${fmtDot(nx)} (${WD[parse(nx).getDay()]})` : '끝남'}</span></div></button>`;
+  };
+  const rts = S.routines.filter((r) => !r.bday);
+  const ended = (r) => (r.end && r.end < today) || !nextOcc(r, today);
+  const section = (k, l, list, cls = '') => {
+    if (!list.length) return '';
+    const fold = k === 'ended' ? !(S.rtFold && S.rtFold.ended) : !!(S.rtFold && S.rtFold[k]);
+    let x = `<div class="${cls}"><button class="sl fold" data-act="rtFold" data-v="${k}" aria-expanded="${!fold}"><span>${l}</span><span class="cnt">${list.length}</span><span class="car">${fold ? '+' : '−'}</span></button>`;
+    if (!fold) x += list.map(cardOf).join('');
+    return x + '</div>';
+  };
   [['daily', '매일'], ['weekly', '매주'], ['monthly', '매월'], ['yearly', '매년']].forEach(([k, l]) => {
-    const list = S.routines.filter((r) => r.rep === k).sort((a, b) => (nextOcc(a, today) || '9').localeCompare(nextOcc(b, today) || '9'));
-    if (!list.length) return;
-    h += `<div class="sl">${l}</div>` + list.map((r) => {
-      const c = colorOf({ type: r.kind, cat: r.cat, sub: r.sub });
-      const nx = nextOcc(r, today);
-      return `<button class="card" style="${sty(c)}" data-act="rtOpen" data-id="${r.id}"><div class="ch"><span class="tt">${esc(r.title)}</span></div><div class="cm rr"><span>${esc(ruleText(r))}</span><span class="muted">${nx ? `다음 ${fmtDot(nx)} (${WD[parse(nx).getDay()]})` : '끝남'}</span></div></button>`;
-    }).join('');
+    const list = rts.filter((r) => r.rep === k && !ended(r)).sort((a, b) => (nextOcc(a, today) || '9').localeCompare(nextOcc(b, today) || '9'));
+    h += section(k, l, list);
   });
+  h += section('ended', '끝난 루틴', rts.filter(ended).sort((a, b) => (b.end || '').localeCompare(a.end || '')), 'endsec');
   return h + '</div>';
 }
-
+// ---------- 생일 ----------
+const bdName = (r) => r.title || '';
+function bdList(today) {
+  const list = S.routines.filter((r) => r.bday).map((r) => ({ r, nx: nextOcc(r, today) })).sort((a, b) => (a.nx || '9').localeCompare(b.nx || '9'));
+  if (!list.length) return '<p class="muted" style="font-size:14px;padding:12px 2px">아직 등록한 생일이 없어요.</p>';
+  return list.map(({ r, nx }) => {
+    const [mm, dd] = (r.md || '01-01').split('-').map(Number);
+    const days = nx ? Math.round((parse(nx) - parse(today)) / 864e5) : null;
+    const dl = days === 0 ? '오늘' : days != null ? `D-${days}` : '';
+    let sub = `${r.lunar ? '음력' : '양력'} ${mm}월 ${dd}일`;
+    if (r.lunar && nx) sub += ` · ${nx.slice(0, 4) === today.slice(0, 4) ? '올해' : '내년'} ${+nx.slice(5, 7)}.${+nx.slice(8, 10)}`;
+    const age = r.byear && nx ? `${+nx.slice(0, 4) - +r.byear}번째` : '';
+    return `<button class="bd" data-act="bdOpen" data-id="${r.id}"><span class="dd ${days === 0 ? 'today' : ''}">${dl}</span><span class="bdt"><b>${esc(bdName(r))}</b><small>${sub}</small></span><span class="age">${age}</span></button>`;
+  }).join('');
+}
+function bdHtml() {
+  const sh = S.sheet, r = sh.draft;
+  const c = colorOf({ type: 'event', cat: r.cat, sub: r.sub });
+  const [mm, dd] = (r.md || '01-01').split('-').map(Number);
+  let h = bandIn(c, r.title, 'title', '이름');
+  h += `<span class="lb">날짜</span><div class="inl">${seg([['solar', '양력'], ['lunar', '음력']], r.lunar ? 'lunar' : 'solar', 'rtCal')}
+    <select aria-label="월" data-f="mm">${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}" ${i + 1 === mm ? 'selected' : ''}>${i + 1}월</option>`).join('')}</select>
+    <select aria-label="일" data-f="dd">${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}" ${i + 1 === dd ? 'selected' : ''}>${i + 1}일</option>`).join('')}</select></div>`;
+  h += field('태어난 해', 'byear', r.byear || '', 'text', 'inputmode="numeric" autocomplete="off"');
+  h += `<span class="lb">분류</span>${catSelects(r)}`;
+  h += area('메모', 'memo', r.memo, 60);
+  return h + errLine(sh) + acts('delRt', 'bdSave', sh.isNew);
+}
+const BD_ACT = {
+  rtTab: (el) => { S.rtTab = el.dataset.v; render(); },
+  bdNew: () => openSheet({ kind: 'bd', isNew: true, draft: { id: uid(), title: '', bday: true, kind: 'event', rep: 'yearly', md: todayStr().slice(5), lunar: false, byear: '', start: '1900-01-01', end: '', ...defCat(), memo: '', st: {}, created: Date.now() } }),
+  bdOpen: (el) => { const r = S.routines.find((x) => x.id === el.dataset.id); if (r) openSheet({ kind: 'bd', isNew: false, draft: clone(r) }); },
+  bdSave: () => {
+    const sh = S.sheet, r = clone(sh.draft);
+    r.title = (r.title || '').trim();
+    if (!r.title) { sh.err = '이름을 입력해 주세요.'; render(); return; }
+    const by = String(r.byear || '').replace(/[^\d]/g, '');
+    if (by && !(+by >= 1900 && +by <= 2100)) { sh.err = '태어난 해를 확인해 주세요.'; render(); return; }
+    r.byear = by; r.bday = true; r.rep = 'yearly'; r.kind = 'event'; r.end = '';
+    if (!r.start || r.start > '1900-01-01') r.start = '1900-01-01';
+    save('routines', r); closeSheet();
+  },
+  // 일회성: 매년 루틴으로 넣어 둔 생일을 생일 탭으로 옮김 (나중에 없앨 버튼)
+  rtToBd: () => {
+    const d = clone(S.sheet.draft);
+    d.title = (d.title || '').replace(/\s*(생일|생신)\s*$/, '').trim() || d.title;
+    d.bday = true; d.rep = 'yearly'; d.kind = 'event'; d.byear = d.byear || '';
+    swapSheet({ kind: 'bd', isNew: false, draft: d });
+  },
+};
 // ---------- 설정 ----------
 function settingsBody() {
   const st = S.settings;
@@ -426,7 +488,7 @@ function sheetHtml() {
     day: () => `${band('#111111', `${fmtMD(sh.d)}${HOLIDAYS[sh.d] ? ' · ' + HOLIDAYS[sh.d] : ''}`)}<div style="margin-top:12px">${dayList(sh.d)}</div><button class="btn pri" style="width:100%;margin-top:8px" data-act="newOn" data-d="${sh.d}">추가</button>`,
     edit: editHtml, cat: catHtml, topic: catHtml, note: noteHtml, rec: recHtml, rt: rtHtml, rocc: roccHtml, defcat: defCatHtml,
     backups: backupsHtml, check: checkHtml, impPrev: impPrevHtml, impRes: impResHtml,
-    ct: ctHtml, bn: bnHtml, pin: pinHtml,
+    ct: ctHtml, bn: bnHtml, pin: pinHtml, bd: bdHtml,
     pjName: pjNameHtml, pjMenu: pjMenuHtml, pjDone: pjDoneHtml, pjChoose: pjChooseHtml, pjPick: pjPickHtml, plan: planHtml,
     xlsx: () => `${band('#111111', '엑셀로 내보내기')}<div class="two">${'<div>' + field('시작', 'from', sh.from, 'date') + '</div><div>' + field('끝', 'to', sh.to, 'date') + '</div>'}</div>${errLine(sh)}<div class="acts"><button class="btn pri" data-act="xlsxGo">내보내기</button></div>`,
     ics: () => `${band('#111111', '구글 캘린더용 내보내기')}<label class="check"><input type="checkbox" data-f="todos" ${sh.todos ? 'checked' : ''}> 할 일도 종일 일정으로 넣기</label>${errLine(sh)}<div class="acts"><button class="btn pri" data-act="icsGo">내보내기</button></div>`,
@@ -507,6 +569,7 @@ function rtHtml() {
   h += `<span class="lb">분류</span>${catSelects(r)}`;
   h += `<div class="two"><div>${field('시작일', 'start', r.start, 'date')}</div><div>${field('종료일 (선택)', 'end', r.end, 'date')}</div></div>`;
   h += area('메모', 'memo', r.memo, 70);
+  if (!sh.isNew && r.rep === 'yearly') h += '<button class="btn sm" style="width:100%;margin-top:14px" data-act="rtToBd">생일로 옮기기</button>';
   return h + errLine(sh) + acts('delRt', 'saveRt', sh.isNew);
 }
 
@@ -1415,6 +1478,7 @@ const ACT = {
     if (id.startsWith('r~')) {
       const [, rid, d] = id.split('~');
       const r = S.routines.find((x) => x.id === rid);
+      if (r && r.bday) { swapSheet({ kind: 'bd', isNew: false, draft: clone(r) }); return; }
       if (r) swapSheet({ kind: 'rocc', rid, d, status: (r.st && r.st[d]) || 'progress', at: (r.mv && r.mv[d]) || d });
       return;
     }
@@ -1702,7 +1766,15 @@ const TD_ACT = {
     save('items', next);
   },
 };
-Object.assign(ACT, PJ_ACT, SAL_ACT, SORT_ACT, TD_ACT);
+const FOLD_ACT = {
+  rtFold: (el) => {
+    S.rtFold = { ...(S.rtFold || {}), [el.dataset.v]: !(S.rtFold && S.rtFold[el.dataset.v]) };
+    try { localStorage.setItem('pb_rtFold', JSON.stringify(S.rtFold)); } catch (e) {}
+    render();
+  },
+};
+try { S.rtFold = JSON.parse(localStorage.getItem('pb_rtFold') || '{}'); } catch (e) { S.rtFold = {}; }
+Object.assign(ACT, PJ_ACT, SAL_ACT, SORT_ACT, TD_ACT, FOLD_ACT, BD_ACT);
 
 // ---------- 입력 ----------
 $app.addEventListener('click', (e) => {

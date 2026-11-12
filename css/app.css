@@ -341,3 +341,21 @@ table.sal tr.co td{background:#F4F4F4;font-weight:500;font-size:12px;color:#111;
 .month .chip.td.other .cb{border-color:var(--tl)}
 .wide .month .chip.td .cb{width:13px;height:13px}
 .wide .month .chip.td .cb svg{width:11px;height:11px}
+
+/* 공휴일 이름 (폰은 짧게) */
+.cell .hn{min-width:0;text-overflow:clip}
+.phone .cell .hn{font-size:9px;line-height:18px;letter-spacing:-.3px}
+/* 루틴북 접기 */
+.sl.fold{display:flex;align-items:center;gap:8px;width:100%;text-align:left;cursor:pointer}
+.sl.fold .cnt{font-size:12px;color:#9A9A9A;font-weight:400}
+.sl.fold .car{margin-left:auto;font-size:18px;font-weight:400;width:24px;text-align:center}
+
+/* 끝난 루틴 · 생일 */
+.endsec .card{opacity:.55}
+.bd{display:flex;align-items:center;gap:12px;padding:12px 2px;border-bottom:1px solid #E6E6E6;width:100%;text-align:left}
+.bd .dd{width:56px;flex:none;text-align:center;font-size:13px;font-weight:700;border:1.5px solid #111;padding:4px 0}
+.bd .dd.today{background:#111;color:#fff}
+.bd .bdt{min-width:0}
+.bd b{font-size:15px;font-weight:500;display:block}
+.bd small{font-size:12px;color:#6B6B6B}
+.bd .age{margin-left:auto;font-size:13px;color:#6B6B6B;flex:none}

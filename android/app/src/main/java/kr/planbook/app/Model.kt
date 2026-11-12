@@ -14,6 +14,7 @@ data class Ev(
     val id: String, val type: String, val title: String,
     val start: LocalDate, val end: LocalDate,
     val color: Int, val status: String, val routine: Boolean, val created: Long,
+    val carry: Boolean = false,
 )
 
 data class Seg(val ev: Ev, val col: Int, val span: Int, var lane: Int = 0)
@@ -133,16 +134,28 @@ class Model(data: JSONObject?) {
                 val bday = o.optBoolean("bday", false)
                 out.add(Ev("r~" + o.optString("id") + "~" + d, if (bday) "event" else kind, if (bday) o.optString("title") + " 생일" else o.optString("title"), shown, shown,
                     colorOf(kind, o.optString("cat"), o.optString("sub")),
-                    stMap?.optString(d.toString(), "progress")?.ifEmpty { "progress" } ?: "progress", true, o.optLong("created", 0)))
+                    stMap?.optString(d.toString(), "progress")?.ifEmpty { "progress" } ?: "progress", true, o.optLong("created", 0),
+                    !bday && kind == "todo" && carryFrom != null && !d.isBefore(carryFrom) && shown == d))
             }
         }
         return out
     }
 
-    fun all(from: LocalDate, to: LocalDate): List<Ev> = plainItems() + occItems(from, to)
+    // 루틴 할 일은 rtCarryFrom 이후 회차만 완료 전까지 오늘로 넘어옴
+    private val carryFrom: LocalDate? = settings.optString("rtCarryFrom", "").let { if (it.isEmpty()) null else try { LocalDate.parse(it) } catch (e: Exception) { null } }
+
+    fun all(from: LocalDate, to: LocalDate): List<Ev> {
+        val base = plainItems() + occItems(from, to)
+        val today = today()
+        val cf = carryFrom ?: return base
+        if (today.isBefore(from) || today.isAfter(to) || !cf.isBefore(today)) return base
+        val have = base.map { it.id }.toHashSet()
+        val past = occItems(cf, today.minusDays(1)).filter { it.carry && it.status == "progress" && !have.contains(it.id) }
+        return base + past
+    }
 
     // ----- 표시 규칙 -----
-    private fun carried(e: Ev, today: LocalDate) = !e.routine && e.type == "todo" && e.status == "progress" && e.start.isBefore(today)
+    private fun carried(e: Ev, today: LocalDate) = (!e.routine || e.carry) && e.type == "todo" && e.status == "progress" && e.start.isBefore(today)
     private fun shownStart(e: Ev, today: LocalDate) = if (carried(e, today)) today else e.start
     private fun shownEnd(e: Ev, today: LocalDate) = if (e.type == "event") e.end else shownStart(e, today)
 

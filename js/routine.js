@@ -93,7 +93,7 @@ export function occItems(routines, from, to) {
       const shown = mv[d] || d;
       if (shown < from || shown > to) continue;
       out.push({
-        id: `r~${rt.id}~${d}`, routine: rt.id, type: rt.bday ? 'event' : (rt.kind || 'event'), title: rt.bday ? `${rt.title} 생일` : rt.title, start: shown, end: shown, sched: d,
+        id: `r~${rt.id}~${d}`, routine: rt.id, type: rt.bday ? 'event' : (rt.kind || 'event'), title: rt.bday ? `${rt.title} 생일` : rt.title, start: shown, end: shown, sched: d, bday: !!rt.bday, moved: shown !== d,
         cat: rt.cat, sub: rt.sub, memo: rt.memo || '', status: (rt.st && rt.st[d]) || 'progress', created: rt.created || 0,
       });
     }

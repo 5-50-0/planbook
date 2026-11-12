@@ -359,3 +359,21 @@ table.sal tr.co td{background:#F4F4F4;font-weight:500;font-size:12px;color:#111;
 .bd b{font-size:15px;font-weight:500;display:block}
 .bd small{font-size:12px;color:#6B6B6B}
 .bd .age{margin-left:auto;font-size:13px;color:#6B6B6B;flex:none}
+
+/* 날짜 목록 할 일: 체크박스 */
+.tdr{display:flex;align-items:flex-start;gap:8px;margin:0 0 7px;padding:4px 2px}
+.tdr .cb{width:18px;height:18px;border:1.5px solid var(--tb);flex:none;display:flex;align-items:center;justify-content:center;background:#fff;margin-top:1px}
+.tdr .cb.on{background:var(--tl);border-color:var(--tl);color:#fff}
+.tdr .cb svg{width:14px;height:14px}
+.tdr .tb{flex:1;min-width:0;text-align:left;display:flex;flex-direction:column;gap:2px}
+.tdr .tt{font-size:14px;line-height:20px;color:var(--tc);word-break:break-all}
+.tdr .tm{font-size:12px;line-height:18px;color:#6B6B6B;white-space:pre-line;word-break:break-all}
+.tdr.done .tt,.tdr.done .tm{color:var(--tl)}
+.cell .n{cursor:pointer}
+.wide .cell .n:hover{text-decoration:underline}
+
+/* 이어북 보기 / 편집 */
+.chips .ybmode{margin-left:auto;min-width:64px;justify-content:center}
+.ybview .yc{cursor:default}
+.ybed .ygrid{outline:2px solid #111;outline-offset:4px}
+.tools>*{flex:none}

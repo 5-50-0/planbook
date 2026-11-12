@@ -36,7 +36,7 @@ export function weekOfMonth(s) {
 }
 
 // 할 일의 표시 날짜: 진행 중이고 날짜가 지났으면 오늘로 이월
-export const isCarried = (item, today) => !item.routine && item.type === 'todo' && (item.status || 'progress') === 'progress' && item.start < today;
+export const isCarried = (item, today) => (!item.routine || item.carry) && item.type === 'todo' && (item.status || 'progress') === 'progress' && item.start < today;
 export function shownDate(item, today) {
   return isCarried(item, today) ? today : item.start;
 }

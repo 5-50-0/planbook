@@ -7,7 +7,7 @@ import {
 import { occItems, occDates, nextOcc, ruleText, lunarToSolar } from './routine.js';
 import { writeXlsx, buildIcs, downloadBlob, stampName } from './export.js';
 
-export const APP_VERSION = '1.5.0';
+export const APP_VERSION = '1.5.1';
 
 const NI = {
   month: '<rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M8 2.5v4M16 2.5v4"/><circle cx="8" cy="14" r=".6"/><circle cx="12" cy="14" r=".6"/><circle cx="16" cy="14" r=".6"/><circle cx="8" cy="17.3" r=".6"/><circle cx="12" cy="17.3" r=".6"/>',
@@ -82,7 +82,20 @@ function dayClass(d) {
 }
 const fmtMD = (d) => { const x = parse(d); return `${x.getMonth() + 1}월 ${x.getDate()}일 (${WD[x.getDay()]})`; };
 const fmtDot = (d) => { const x = parse(d); return `${x.getMonth() + 1}.${x.getDate()}`; };
-const allItems = (from, to) => S.items.concat(occItems(S.routines, from, to));
+// 루틴 할 일은 rtCarryFrom 이후 회차만, 완료 전까지 오늘로 넘어옴 (그 전 회차는 그대로)
+function allItems(from, to) {
+  const cf = S.settings && S.settings.rtCarryFrom;
+  const mark = (it) => (cf && it.type === 'todo' && !it.bday && !it.moved && it.sched >= cf ? { ...it, carry: true } : it);
+  const occ = occItems(S.routines, from, to).map(mark);
+  const today = todayStr();
+  if (cf && from <= today && today <= to && cf < today) {
+    const have = new Set(occ.map((x) => x.id));
+    occItems(S.routines, cf, addDays(today, -1)).map(mark)
+      .filter((x) => x.carry && (x.status || 'progress') === 'progress' && !have.has(x.id))
+      .forEach((x) => occ.push(x));
+  }
+  return S.items.concat(occ);
+}
 const findItem = (id) => S.items.find((x) => x.id === id);
 const linkedNotes = (id) => S.notes.filter((n) => n.linkId === id);
 
@@ -168,7 +181,7 @@ function monthBody() {
       const cls = ['cell', dayClass(d), parse(d).getMonth() !== m ? 'other' : '', d === today ? 'today' : '', W && d === S.sel ? 'sel' : ''].join(' ');
       const hol = HOLIDAYS[d] ? `<span class="hn">${W ? HOLIDAYS[d] : (HOL_SHORT[HOLIDAYS[d]] || HOLIDAYS[d])}</span>` : '';
       const more = hidden[i] ? `<span class="more" data-act="daySheet" data-d="${d}">+${hidden[i]}</span>` : '';
-      h += `<button class="${cls}" style="grid-column:${i + 1}" data-act="addOn" data-d="${d}" aria-label="${fmtMD(d)} 새 일정"><span class="n">${parse(d).getDate()}</span>${hol}${more}</button>`;
+      h += `<button class="${cls}" style="grid-column:${i + 1}" data-act="addOn" data-d="${d}" aria-label="${fmtMD(d)} 새 일정"><span class="n" data-act="selDay" data-d="${d}" role="button" aria-label="${fmtMD(d)} 보기">${parse(d).getDate()}</span>${hol}${more}</button>`;
     });
     segs.filter((s) => s.lane < maxL).forEach((s) => {
       const c = colorOf(s.item);
@@ -186,7 +199,7 @@ function monthBody() {
         const st = s.item.status || 'progress', isR = s.item.id.startsWith('r~');
         const done = st !== 'progress';
         const tc = colorOf(s.item);
-        h += `<button class="${cls} td ${done ? 'done' : ''}" style="grid-column:${s.col + 1}/span ${s.span};grid-row:${s.lane + 2};--tc:${shadeHex(tc, 0.55)};--tb:${shadeHex(tc, 0.4)};--tl:${shadeHex(tc, 0.08)}" data-act="open" data-id="${s.item.id}"><span class="cb ${st === 'done' ? 'on' : ''}" ${isR ? '' : `data-act="tdTog" data-id="${s.item.id}"`} role="checkbox" aria-checked="${st === 'done'}" aria-label="완료">${st === 'done' ? IC.check : ''}</span><span class="tt">${esc(s.item.title || '(제목 없음)')}</span></button>`;
+        h += `<button class="${cls} td ${done ? 'done' : ''}" style="grid-column:${s.col + 1}/span ${s.span};grid-row:${s.lane + 2};--tc:${shadeHex(tc, 0.55)};--tb:${shadeHex(tc, 0.4)};--tl:${shadeHex(tc, 0.08)}" data-act="open" data-id="${s.item.id}"><span class="cb ${st === 'done' ? 'on' : ''}" data-act="tdTog" data-id="${s.item.id}" role="checkbox" aria-checked="${st === 'done'}" aria-label="완료">${st === 'done' ? IC.check : ''}</span><span class="tt">${esc(s.item.title || '(제목 없음)')}</span></button>`;
         return;
       }
       h += `<button class="${cls}" style="grid-column:${s.col + 1}/span ${s.span};grid-row:${s.lane + 2};background:${bg};color:${textOn(c)}" data-act="open" data-id="${s.item.id}">${esc(s.item.title || '(제목 없음)')}</button>`;
@@ -210,8 +223,14 @@ function cardHtml(it) {
   const nt = !it.routine && linkedNotes(it.id).length ? `<span class="ni">${IC.note}</span>` : '';
   return `<button class="card" style="${sty(c)}" data-act="open" data-id="${it.id}"><div class="ch"><span class="tt">${esc(it.title || '(제목 없음)')}</span>${nt}</div>${memo}</button>`;
 }
+// 먼슬리 옆 날짜 목록: 할 일은 체크박스로
+function tdRow(it) {
+  const tc = colorOf(it), st = it.status || 'progress', isR = it.id.startsWith('r~');
+  const memo = it.memo ? `<span class="tm">${esc(it.memo)}</span>` : '';
+  return `<div class="tdr ${st !== 'progress' ? 'done' : ''}" style="--tc:${shadeHex(tc, 0.55)};--tb:${shadeHex(tc, 0.4)};--tl:${shadeHex(tc, 0.08)}"><button class="cb ${st === 'done' ? 'on' : ''}" data-act="tdTog" data-id="${it.id}" role="checkbox" aria-checked="${st === 'done'}" aria-label="완료">${st === 'done' ? IC.check : ''}</button><button class="tb" data-act="open" data-id="${it.id}"><span class="tt">${esc(it.title || '(제목 없음)')}</span>${memo}</button></div>`;
+}
 function dayList(d) {
-  return sortDay(itemsOnDay(allItems(d, d), d, todayStr())).map(cardHtml).join('');
+  return sortDay(itemsOnDay(allItems(d, d), d, todayStr())).map((it) => (it.type === 'todo' ? tdRow(it) : cardHtml(it))).join('');
 }
 
 // ---------- 위클리 ----------
@@ -287,9 +306,9 @@ function yearBody() {
   const topics = S.settings.topics || [];
   if (!S.topic || !topicOf(S.topic)) S.topic = topics[0]?.id || null;
   const tp = topicOf(S.topic);
-  let h = `<div class="head"><div class="big"><h1>${S.year}</h1></div>${headTools('yPrev', 'yNext', { today: false, extra: tp ? '<button class="today" data-act="nav" data-v="ysum">요약</button>' : '', plus: 'topicNew' })}</div><div class="pad">`;
+  let h = `<div class="head"><div class="big"><h1>${S.year}</h1></div>${headTools('yPrev', 'yNext', { today: false, extra: tp ? `<button class="today" data-act="nav" data-v="ysum">요약</button>` : '', plus: 'topicNew' })}</div><div class="pad ${S.ybEdit ? 'ybed' : 'ybview'}">`;
   h += `<div class="chips">${topics.map((t) => `<button class="chip2 ${t.id === S.topic ? 'on' : ''}" data-act="topicSel" data-id="${t.id}">${esc(t.name)}</button>`).join('')}
-    ${tp ? `<button class="chip2 ghost" data-act="topicEdit" data-id="${tp.id}">편집</button>` : ''}</div>`;
+    ${tp ? `<button class="chip2 ghost" data-act="topicEdit" data-id="${tp.id}">주제 수정</button><button class="chip2 ybmode ${S.ybEdit ? 'on' : ''}" data-act="ybEdit" aria-pressed="${!!S.ybEdit}">${S.ybEdit ? '완료' : '편집'}</button>` : ''}</div>`;
   if (!tp) return h + '</div>';
   const doc = ybDoc(tp.id, S.year);
   const manual = new Set(doc?.days || []);
@@ -308,7 +327,7 @@ function yearBody() {
     }
   }
   h += '</div>';
-  h += `<div class="sec" style="margin-top:18px"><div class="sh"><span>메모</span></div><textarea class="ymemo" aria-label="${S.year}년 ${esc(tp.name)} 메모" data-ybmemo="1">${esc(doc?.memo || '')}</textarea></div>`;
+  h += `<div class="sec" style="margin-top:18px"><div class="sh"><span>메모</span></div><textarea class="ymemo" aria-label="${S.year}년 ${esc(tp.name)} 메모" data-ybmemo="1" ${S.ybEdit ? '' : 'readonly'}>${esc(doc?.memo || '')}</textarea></div>`;
   return h + '</div>';
 }
 function rangesOf(days) {
@@ -1105,7 +1124,7 @@ async function ensureSettingsAndBackup() {
     if (has) {
       try { await backupCurrent(`${APP_VERSION} 업데이트 전 자동 백업`); } catch (e) { console.warn(e); toast('자동 백업을 하지 못했어요. 인터넷 연결 후 다시 열어 주세요'); return; }
     }
-    S.settings = { ...st, backupVer: APP_VERSION };
+    S.settings = { ...st, backupVer: APP_VERSION, ...(st.rtCarryFrom ? {} : { rtCarryFrom: todayStr() }) };
     D.saveSettings(U(), S.settings);
   }
 }
@@ -1408,7 +1427,7 @@ function ybPreview(cur) {
 }
 $app.addEventListener('touchstart', (e) => {
   const c = e.target.closest && e.target.closest('.yc');
-  if (!c || c.dataset.link || e.touches.length > 1) return;
+  if (!S.ybEdit || !c || c.dataset.link || e.touches.length > 1) return;
   const t = e.touches[0];
   ybDrag.x = t.clientX; ybDrag.y = t.clientY;
   clearTimeout(ybDrag.timer);
@@ -1457,13 +1476,14 @@ const ACT = {
     try { await D.resetPw(em); S.loginMsg = '메일을 보냈어요. 메일의 링크에서 새 비밀번호를 정해 주세요.'; } catch (e) { S.loginErr = authMsg(e); }
     S.busy = false; render();
   },
-  nav: (el) => { if (el.dataset.v !== S.view) S.unlocked = false; S.view = el.dataset.v; if (S.sheet) closeSheet(); else render(); },
+  nav: (el) => { if (el.dataset.v !== S.view) { S.unlocked = false; S.ybEdit = false; } S.view = el.dataset.v; if (S.sheet) closeSheet(); else render(); },
   mPrev: () => { let [y, m] = S.month; m--; if (m < 0) { m = 11; y--; } S.month = [y, m]; render(); },
   mNext: () => { let [y, m] = S.month; m++; if (m > 11) { m = 0; y++; } S.month = [y, m]; render(); },
   wPrev: () => { S.sel = addDays(S.sel, -7); render(); },
   wNext: () => { S.sel = addDays(S.sel, 7); render(); },
-  yPrev: () => { S.year--; render(); },
-  yNext: () => { S.year++; render(); },
+  yPrev: () => { S.year--; S.ybEdit = false; render(); },
+  yNext: () => { S.year++; S.ybEdit = false; render(); },
+  ybEdit: () => { S.ybEdit = !S.ybEdit; render(); },
   goToday: () => { S.sel = todayStr(); const t = new Date(); S.month = [t.getFullYear(), t.getMonth()]; render(); },
   addOn: (el) => { S.sel = el.dataset.d; newForm(el.dataset.d); },
   newOn: (el) => { S.sel = el.dataset.d; newForm(el.dataset.d); },
@@ -1551,7 +1571,7 @@ const ACT = {
   delRec: () => { if (!armDel()) return; D.deleteDocIn(U(), 'records', S.sheet.draft.id); closeSheet(); },
 
   // 이어북
-  topicSel: (el) => { S.topic = el.dataset.id; render(); },
+  topicSel: (el) => { S.topic = el.dataset.id; S.ybEdit = false; render(); },
   topicNew: () => openSheet({ kind: 'topic', isNew: true, draft: { id: uid(), name: '', color: PALETTE[0] } }),
   topicEdit: (el) => { const t = topicOf(el.dataset.id); if (t) openSheet({ kind: 'topic', isNew: false, draft: { ...t } }); },
   topicSave: () => {
@@ -1571,6 +1591,8 @@ const ACT = {
   },
   ybTog: (el, e) => {
     if (Date.now() < ybDrag.quiet) return;
+    // 보기 모드: 칸을 눌러도 바뀌지 않음 (일정에서 온 칸은 그 일정을 열어서 볼 수만 있음)
+    if (!S.ybEdit) { if (el.dataset.link) { const it = findItem(el.dataset.link); if (it) swapSheet({ kind: 'edit', draft: { ...it }, isNew: false }); } return; }
     const d = el.dataset.d;
     const set = new Set(ybDoc(S.topic, S.year)?.days || []);
     if (e && e.shiftKey && ybAnchor.d && ybAnchor.d.slice(0, 4) === d.slice(0, 4) && ybAnchor.topic === S.topic) {
@@ -1758,7 +1780,18 @@ $app.addEventListener('pointercancel', dragEnd);
 const TD_ACT = {
   // 먼슬리 체크박스: 진행 ↔ 완료. 지난 할 일은 등록일자에 그대로 완료로 남김
   tdTog: (el) => {
-    const it = S.items.find((x) => x.id === el.dataset.id);
+    const id = el.dataset.id;
+    if (id.startsWith('r~')) {
+      // 루틴 할 일: 그 회차만 완료 ↔ 진행
+      const [, rid, d] = id.split('~');
+      const r0 = S.routines.find((x) => x.id === rid);
+      if (!r0) return;
+      const r = clone(r0); r.st = r.st || {};
+      if (r.st[d] === 'done') { delete r.st[d]; if (r.mv) { delete r.mv[d]; if (!Object.keys(r.mv).length) delete r.mv; } } else r.st[d] = 'done';
+      save('routines', r);
+      return;
+    }
+    const it = S.items.find((x) => x.id === id);
     if (!it) return;
     const st = it.status || 'progress';
     const next = { ...it, status: st === 'done' ? 'progress' : 'done' };
@@ -1774,7 +1807,15 @@ const FOLD_ACT = {
   },
 };
 try { S.rtFold = JSON.parse(localStorage.getItem('pb_rtFold') || '{}'); } catch (e) { S.rtFold = {}; }
-Object.assign(ACT, PJ_ACT, SAL_ACT, SORT_ACT, TD_ACT, FOLD_ACT, BD_ACT);
+const DAY_ACT = {
+  // 날짜 숫자: PC는 오른쪽 목록만 그 날로, 폰은 그 날 목록 창
+  selDay: (el) => {
+    const d = el.dataset.d;
+    S.sel = d;
+    if (wide()) render(); else openSheet({ kind: 'day', d });
+  },
+};
+Object.assign(ACT, PJ_ACT, SAL_ACT, SORT_ACT, TD_ACT, FOLD_ACT, BD_ACT, DAY_ACT);
 
 // ---------- 입력 ----------
 $app.addEventListener('click', (e) => {

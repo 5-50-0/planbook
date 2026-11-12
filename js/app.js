@@ -7,7 +7,7 @@ import {
 import { occItems, occDates, nextOcc, ruleText, lunarToSolar } from './routine.js';
 import { writeXlsx, buildIcs, downloadBlob, stampName } from './export.js';
 
-export const APP_VERSION = '1.5.2';
+export const APP_VERSION = '1.5.3';
 
 const NI = {
   month: '<rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M8 2.5v4M16 2.5v4"/><circle cx="8" cy="14" r=".6"/><circle cx="12" cy="14" r=".6"/><circle cx="16" cy="14" r=".6"/><circle cx="8" cy="17.3" r=".6"/><circle cx="12" cy="17.3" r=".6"/>',
@@ -1888,7 +1888,8 @@ $app.addEventListener('change', async (e) => {
   if (el.dataset.sf === 'color') { S.sheet.draft.subs[+el.dataset.i].color = el.value.toUpperCase(); render(); }
 });
 let rt;
-window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(render, 120); });
+let lastW = window.innerWidth;
+window.addEventListener('resize', () => { if (window.innerWidth === lastW) return; lastW = window.innerWidth; clearTimeout(rt); rt = setTimeout(render, 120); });
 let lastDay = todayStr();
 setInterval(() => { if (todayStr() !== lastDay) { lastDay = todayStr(); render(); } }, 60000);
 

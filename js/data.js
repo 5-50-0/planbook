@@ -38,7 +38,8 @@ export const logout = () => signOut(auth);
 export const reauth = (pw) => reauthenticateWithCredential(auth.currentUser, EmailAuthProvider.credential(auth.currentUser.email, pw));
 
 // 데이터 묶음: items(일정·할 일), notes(회의·메모), records(기록), routines(루틴), yb(이어북)
-export const COLS = ['items', 'notes', 'records', 'routines', 'yb', 'projects'];
+// 가계부: gbTx(내역), gbFixed(고정 지출 · 이체), gbConf(가계부 설정)
+export const COLS = ['items', 'notes', 'records', 'routines', 'yb', 'projects', 'gbTx', 'gbFixed', 'gbConf'];
 const col = (uid, name) => collection(db, 'users', uid, name);
 const settingsDoc = (uid) => doc(db, 'users', uid, 'meta', 'settings');
 

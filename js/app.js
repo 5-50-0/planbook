@@ -6,6 +6,7 @@ import {
 } from './util.js';
 import { occItems, occDates, nextOcc, ruleText, lunarToSolar } from './routine.js';
 import { writeXlsx, buildIcs, downloadBlob, stampName } from './export.js';
+import { setupGb } from './gb.js';
 
 export const APP_VERSION = '1.5.3';
 
@@ -51,6 +52,10 @@ const S = {
   loginView: 'login', loginErr: '', loginMsg: '', busy: false,
   sheet: null, acc: { screen: false, widget: false, cats: false, topics: false, data: false, acct: false },
   toast: '', delArm: false, mbTab: 'meet', year: new Date().getFullYear(), topic: null,
+  // 가계부
+  mode: 'pb', modePop: false, gbTx: [], gbFixed: [], gbConf: [], gbUnlock: false,
+  gbView: 'book', gbTab: 'cal', gbMonth: [new Date().getFullYear(), new Date().getMonth()], gbSel: todayStr(),
+  gbBudOff: 0, gbBudTab: 'bud', gbStatTab: 'mon', gbYear: new Date().getFullYear(), gbPick: '_net', gbExpand: new Set(), gbAcc: {},
 };
 let unwatch = null;
 const $app = document.getElementById('app');
@@ -518,6 +523,7 @@ function sheetHtml() {
     edit: editHtml, cat: catHtml, topic: catHtml, note: noteHtml, rec: recHtml, rt: rtHtml, rocc: roccHtml, defcat: defCatHtml,
     backups: backupsHtml, check: checkHtml, impPrev: impPrevHtml, impRes: impResHtml,
     ct: ctHtml, bn: bnHtml, pin: pinHtml, bd: bdHtml,
+    ...G.sheets,
     pjName: pjNameHtml, pjMenu: pjMenuHtml, pjDone: pjDoneHtml, pjChoose: pjChooseHtml, pjPick: pjPickHtml, plan: planHtml,
     xlsx: () => `${band('#111111', '엑셀로 내보내기')}<div class="two">${'<div>' + field('시작', 'from', sh.from, 'date') + '</div><div>' + field('끝', 'to', sh.to, 'date') + '</div>'}</div>${errLine(sh)}<div class="acts"><button class="btn pri" data-act="xlsxGo">내보내기</button></div>`,
     ics: () => `${band('#111111', '구글 캘린더용 내보내기')}<label class="check"><input type="checkbox" data-f="todos" ${sh.todos ? 'checked' : ''}> 할 일도 종일 일정으로 넣기</label>${errLine(sh)}<div class="acts"><button class="btn pri" data-act="icsGo">내보내기</button></div>`,
@@ -996,6 +1002,7 @@ async function pinDone() {
     if ((await pinHash(v)) !== S.settings.recPin) { sh.v = ''; sh.err = '비밀번호가 달라요'; render(); return; }
     if (sh.mode === 'old') { S.sheet = { kind: 'pin', mode: 'new', v: '' }; render(); return; }
     S.unlocked = true;
+    if (sh.then === 'gb') { S.gbUnlock = true; closeSheet(); return; }
     if (sh.then === 'xlsx') { const y = new Date().getFullYear(); swapSheet({ kind: 'xlsx', from: `${y}-01-01`, to: `${y}-12-31` }); return; }
     closeSheet();
     return;
@@ -1086,6 +1093,7 @@ function render() {
   if (!S.month) { const t = parse(S.sel); S.month = [t.getFullYear(), t.getMonth()]; }
   const active = document.activeElement;
   const keepId = active && active.id && $app.contains(active) ? active.id : null;
+  if (S.mode === 'gb') { $app.innerHTML = renderGb(); if (keepId) { const el = document.getElementById(keepId); if (el) el.focus(); } return; }
   const V = S.view;
   const page = V === 'month' ? monthHead() + monthBody() : V === 'week' ? weekHead() + weekBody() : V === 'mini' ? miniBody()
     : V === 'year' ? yearBody() : V === 'ysum' ? ysumBody() : V === 'routine' ? routineBody() : V === 'proj' ? projBody() : V === 'pjd' ? pjDetailBody() : settingsBody();
@@ -1094,16 +1102,39 @@ function render() {
   if (wide()) {
     const mi = (v, l) => `<button class="mi ${navV === v ? 'on' : ''}" data-act="nav" data-v="${v}">${nIc(v)}${l}</button>`;
     const right = V === 'month' ? `<aside class="rpanel"><p class="dt ${dayClass(S.sel)}">${fmtMD(S.sel)}${HOLIDAYS[S.sel] ? ' · ' + HOLIDAYS[S.sel] : ''}</p><p class="dn">${parse(S.sel).getDate()}</p>${dayList(S.sel)}<button class="btn sm" style="margin-top:6px" data-act="newOn" data-d="${S.sel}">추가</button></aside>` : '';
-    html = `<div class="wide"><nav class="side">${mi('month', '먼슬리')}${mi('week', '위클리')}${mi('proj', '플젝북')}${mi('mini', '미니북')}${mi('year', '이어북')}${mi('routine', '루틴북')}<div class="grow"></div><button class="mi sync ${S.syncing ? 'spin' : ''}" data-act="sync">${IC.sync}<span>동기화</span><small>${S.syncAt ? fmtAt(S.syncAt).slice(11) : ''}</small></button><button class="mi set ${V === 'settings' ? 'on' : ''}" data-act="nav" data-v="settings">${nIc('settings')}설정</button></nav><main class="main">${page}</main>${right}${sheetHtml()}</div>`;
+    html = `<div class="wide"><nav class="side">${modeSwitch()}${mi('month', '먼슬리')}${mi('week', '위클리')}${mi('proj', '플젝북')}${mi('mini', '미니북')}${mi('year', '이어북')}${mi('routine', '루틴북')}<div class="grow"></div><button class="mi sync ${S.syncing ? 'spin' : ''}" data-act="sync">${IC.sync}<span>동기화</span><small>${S.syncAt ? fmtAt(S.syncAt).slice(11) : ''}</small></button><button class="mi set ${V === 'settings' ? 'on' : ''}" data-act="nav" data-v="settings">${nIc('settings')}설정</button></nav><main class="main">${page}</main>${right}${sheetHtml()}</div>`;
   } else {
     const tab = (v, l) => `<button class="${navV === v ? 'on' : ''}" data-act="nav" data-v="${v}">${nIc(v)}<span>${l}</span></button>`;
     const showFab = ['month', 'week'].includes(V);
     const fab = showFab ? `<button class="fab" aria-label="추가" data-act="fab">${IC.plus}</button>` : '';
-    html = `<div class="phone"><div class="page">${page}</div>${V !== 'settings' ? `<nav class="nav">${tab('month', '먼슬리')}${tab('week', '위클리')}${tab('proj', '플젝북')}${tab('mini', '미니북')}${tab('year', '이어북')}${tab('routine', '루틴북')}</nav>` : ''}${fab}${sheetHtml()}</div>`;
+    html = `<div class="phone"><div class="page">${popTitle(page)}</div>${V !== 'settings' ? `<nav class="nav">${tab('month', '먼슬리')}${tab('week', '위클리')}${tab('proj', '플젝북')}${tab('mini', '미니북')}${tab('year', '이어북')}${tab('routine', '루틴북')}</nav>` : ''}${fab}${modePopHtml()}${sheetHtml()}</div>`;
   }
   if (S.toast) html += `<div class="toast">${esc(S.toast)}</div>`;
   $app.innerHTML = html;
   if (keepId) { const el = document.getElementById(keepId); if (el) el.focus(); }
+}
+
+// ---------- 플랜북 ⇄ 가계부 ----------
+const SW_IC = {
+  pb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 9.5h16M9 3v4M15 3v4"/></svg>',
+  gb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6l3 12 4-9 4 9 3-12M4 11h16"/></svg>',
+};
+// PC: 왼쪽 메뉴 맨 위 스위치
+const modeSwitch = () => `<button class="msw" data-act="gMode" data-v="${S.mode === 'gb' ? 'pb' : 'gb'}" aria-label="플랜북 · 가계부 바꾸기"><span class="swt ${S.mode === 'gb' ? 'on' : ''}"><i>${SW_IC[S.mode]}</i></span><span>${S.mode === 'gb' ? '가계부' : '플랜북'}</span></button>`;
+// 폰: 왼쪽 위 제목을 누르면 고르는 창
+const popTitle = (page) => page.replace('<div class="big">', '<div class="big pt" data-act="modePop" role="button" aria-label="플랜북 · 가계부 고르기">');
+const modePopHtml = () => (S.modePop ? `<div class="mpbg" data-act="modePopX"></div><div class="mpop">${[['pb', '플랜북'], ['gb', '가계부']].map(([k, l]) => `<button data-act="gMode" data-v="${k}"><i>${SW_IC[k]}</i><span>${l}</span>${S.mode === k ? IC.check : ''}</button>`).join('')}</div>` : '');
+function renderGb() {
+  const page = G.page();
+  let html;
+  if (wide()) {
+    html = `<div class="wide gb"><nav class="side">${modeSwitch()}${G.sideItems()}<div class="grow"></div><button class="mi sync ${S.syncing ? 'spin' : ''}" data-act="sync">${IC.sync}<span>동기화</span><small>${S.syncAt ? fmtAt(S.syncAt).slice(11) : ''}</small></button><button class="mi set ${S.gbView === 'set' ? 'on' : ''}" data-act="gView" data-v="set">${G.setIcon()}가계부 설정</button></nav><main class="main">${page}</main>${G.rpanel()}${sheetHtml()}</div>`;
+  } else {
+    const fab = G.showFab() ? `<button class="fab" aria-label="추가" data-act="gFab">${IC.plus}</button>` : '';
+    html = `<div class="phone gb"><div class="page">${popTitle(page)}</div>${S.gbView !== 'set' ? `<nav class="nav n4">${G.navTabs()}</nav>` : ''}${fab}${modePopHtml()}${sheetHtml()}</div>`;
+  }
+  if (S.toast) html += `<div class="toast">${esc(S.toast)}</div>`;
+  return html;
 }
 
 // ---------- 열고 닫기 ----------
@@ -1118,8 +1149,12 @@ function closeSheet(fromPop) {
   if (!fromPop && history.state && history.state.sheet) history.back();
 }
 window.addEventListener('popstate', () => closeSheet(true));
-document.addEventListener('visibilitychange', () => { if (document.hidden && S.unlocked) { S.unlocked = false; if (S.sheet && (S.sheet.kind === 'ct' || S.sheet.kind === 'bn')) closeSheet(); else render(); } });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden || !(S.unlocked || S.gbUnlock)) return;
+  S.unlocked = false; S.gbUnlock = false;
+  if (S.sheet && (S.sheet.kind === 'ct' || S.sheet.kind === 'bn' || (S.mode === 'gb' && S.sheet.kind !== 'pin'))) closeSheet(); else render();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (S.modePop) { S.modePop = false; render(); } else closeSheet(); } });
 
 function defCat() {
   const st = S.settings;
@@ -1138,7 +1173,9 @@ const save = (name, obj) => { try { D.saveDoc(U(), name, obj); } catch (e) { toa
 const armDel = () => { if (!S.delArm) { S.delArm = true; render(); return false; } return true; };
 
 function snapshot() {
-  return { items: S.items, notes: S.notes, records: S.records, routines: S.routines, yb: S.yb, projects: S.projects, settings: S.settings };
+  const o = { settings: S.settings };
+  D.COLS.forEach((c) => { o[c] = S[c]; });
+  return o;
 }
 async function ensureSettingsAndBackup() {
   const st = S.settings;
@@ -1152,8 +1189,8 @@ async function ensureSettingsAndBackup() {
   }
 }
 // ---------- 데이터 점검 · 합치기 복원 ----------
-const CK = [['ev', '일정'], ['td', '할 일'], ['pj', '플젝'], ['mt', '회의'], ['mm', '메모'], ['rc', '기록'], ['rt', '루틴'], ['yb', '이어북 칠한 날'], ['ct', '분류 · 주제']];
-const ckKey = (name, o) => name === 'items' ? (o.type === 'todo' ? 'td' : 'ev') : name === 'notes' ? (o.kind === 'meeting' ? 'mt' : 'mm') : name === 'records' ? 'rc' : name === 'projects' ? 'pj' : 'rt';
+const CK = [['ev', '일정'], ['td', '할 일'], ['pj', '플젝'], ['mt', '회의'], ['mm', '메모'], ['rc', '기록'], ['rt', '루틴'], ['yb', '이어북 칠한 날'], ['ct', '분류 · 주제'], ['gb', '가계부 내역 · 고정'], ['gc', '가계부 통장 · 분류']];
+const ckKey = (name, o) => name === 'gbTx' || name === 'gbFixed' ? 'gb' : name === 'items' ? (o.type === 'todo' ? 'td' : 'ev') : name === 'notes' ? (o.kind === 'meeting' ? 'mt' : 'mm') : name === 'records' ? 'rc' : name === 'projects' ? 'pj' : 'rt';
 const zeroC = () => Object.fromEntries(CK.map(([k]) => [k, 0]));
 function countsOf(d) {
   const c = zeroC();
@@ -1161,6 +1198,9 @@ function countsOf(d) {
   (d.yb || []).forEach((y) => { c.yb += (y.days || []).length; });
   const st = d.settings || {};
   c.ct = (st.cats || []).length + (st.topics || []).length;
+  c.gb = (d.gbTx || []).length + (d.gbFixed || []).length;
+  const gcf = (d.gbConf || []).find((x) => x.id === 'main');
+  c.gc = gcf ? (gcf.accounts || []).length + (gcf.exp || []).length + (gcf.inc || []).length : 0;
   return c;
 }
 // 어떤 버전의 백업이든 같은 모양으로 맞춤 (빠뜨리는 항목 없이)
@@ -1186,17 +1226,19 @@ function labelOf(name, o) {
   if (name === 'notes') return `${(o.date || '').replace(/-/g, '.')} ${o.title || '(제목 없음)'}`;
   if (name === 'records') return `${RK[o.kind] || '기록'} ${o.name || o.year || o.company || ''} ${o.date || ''}`.trim();
   if (name === 'projects') return `플젝 ${o.name || ''}`;
+  if (name === 'gbTx') return `가계부 ${(o.date || '').replace(/-/g, '.')} ${o.title || ''} ${o.amount || ''}`.trim();
+  if (name === 'gbFixed') return `가계부 고정 ${o.title || ''}`;
   return `루틴 ${o.title || ''}`;
 }
 // 지금(cur)에 파일(file)을 합치는 계획. 지금 있는 것은 그대로 둠
 function planMerge(cur, file) {
   const plan = { add: {}, yb: [], upd: [], settings: null };
-  ['items', 'notes', 'records', 'routines', 'projects'].forEach((n) => {
+  ['items', 'notes', 'records', 'routines', 'projects', 'gbTx', 'gbFixed', 'gbConf'].forEach((n) => {
     const ids = new Set((cur[n] || []).map((o) => o.id));
     plan.add[n] = file[n].filter((o) => !ids.has(o.id));
   });
   // 같은 항목이 이미 있으면 바꾸지 않고, 지금 없는 칸(예: 플젝 연결)만 채움
-  ['items', 'notes', 'records', 'routines'].forEach((n) => {
+  ['items', 'notes', 'records', 'routines', 'gbTx', 'gbFixed'].forEach((n) => {
     const cm = new Map((cur[n] || []).map((o) => [o.id, o]));
     file[n].forEach((o) => {
       const c = cm.get(o.id);
@@ -1216,6 +1258,22 @@ function planMerge(cur, file) {
     const memo = !c.memo && fp.memo ? fp.memo : c.memo;
     if (more.length || memo !== c.memo) plan.upd.push({ name: 'projects', before: c, after: { ...c, plans: [...(c.plans || []), ...more], memo: memo || '' } });
   });
+  // 가계부 설정: 빠진 통장 · 분류 · 소분류 · 예산만 채움
+  const gcCur = (cur.gbConf || []).find((x) => x.id === 'main'), gcFile = (file.gbConf || []).find((x) => x.id === 'main');
+  if (gcCur && gcFile) {
+    const after = clone(gcCur); let ch = false;
+    after.accounts = after.accounts || []; after.exp = after.exp || []; after.inc = after.inc || []; after.budget = after.budget || {};
+    (gcFile.accounts || []).forEach((a) => { if (!after.accounts.some((x) => x.id === a.id)) { after.accounts.push(clone(a)); ch = true; } });
+    ['exp', 'inc'].forEach((k) => (gcFile[k] || []).forEach((fc) => {
+      const c = after[k].find((x) => x.id === fc.id);
+      if (!c) { after[k].push(clone(fc)); ch = true; return; }
+      c.subs = c.subs || [];
+      (fc.subs || []).forEach((fs) => { if (!c.subs.some((x) => x.id === fs.id)) { c.subs.push(clone(fs)); ch = true; } });
+    }));
+    Object.entries(gcFile.budget || {}).forEach(([k, v]) => { if (!(k in after.budget)) { after.budget[k] = v; ch = true; } });
+    Object.keys(gcFile).forEach((k) => { if (k !== 'updated' && !(k in after)) { after[k] = clone(gcFile[k]); ch = true; } });
+    if (ch) plan.upd.push({ name: 'gbConf', before: gcCur, after });
+  }
   const ybCur = new Map((cur.yb || []).map((y) => [y.id, y]));
   plan.add.yb = [];
   file.yb.forEach((y) => {
@@ -1246,7 +1304,7 @@ function planMerge(cur, file) {
 // 파일의 모든 항목이 지금(after)에 있는지 하나씩 확인
 function verifyMerge(file, after) {
   const got = zeroC(), missing = [];
-  ['items', 'notes', 'records', 'routines', 'projects'].forEach((n) => {
+  ['items', 'notes', 'records', 'routines', 'projects', 'gbTx', 'gbFixed'].forEach((n) => {
     const ids = new Set((after[n] || []).map((o) => o.id));
     file[n].forEach((o) => { if (ids.has(o.id)) got[ckKey(n, o)]++; else missing.push(labelOf(n, o)); });
   });
@@ -1262,6 +1320,9 @@ function verifyMerge(file, after) {
   const fs = file.settings || {};
   (fs.cats || []).forEach((c) => { if ((st.cats || []).some((x) => x.id === c.id)) got.ct++; else missing.push(`분류 ${c.name || ''}`); });
   (fs.topics || []).forEach((t) => { if ((st.topics || []).some((x) => x.id === t.id)) got.ct++; else missing.push(`주제 ${t.name || ''}`); });
+  const gA = (after.gbConf || []).find((x) => x.id === 'main') || {}, gF = (file.gbConf || []).find((x) => x.id === 'main') || {};
+  (gF.accounts || []).forEach((a) => { if ((gA.accounts || []).some((x) => x.id === a.id)) got.gc++; else missing.push(`가계부 통장 ${a.name || ''}`); });
+  ['exp', 'inc'].forEach((k) => (gF[k] || []).forEach((c) => { if ((gA[k] || []).some((x) => x.id === c.id)) got.gc++; else missing.push(`가계부 분류 ${c.name || ''}`); }));
   return { got, missing };
 }
 // 백업에는 있는데 지금은 없는 것
@@ -1478,7 +1539,14 @@ $app.addEventListener('touchend', ybEnd);
 $app.addEventListener('touchcancel', ybEnd);
 $app.addEventListener('contextmenu', (e) => { if (e.target.closest && e.target.closest('.yc')) e.preventDefault(); });
 
+const G = setupGb({ S, render, openSheet, closeSheet, toast, save, U, D, esc, uid, band, seg, errLine, armDel, wide, IC,
+  HOLIDAYS, parse, ymd, addDays, todayStr, WD, EN_MONTH, monthWeeks, textOn, PALETTE, writeXlsx, stampName,
+  backupCurrent, commas, wonOf, fmtMD, dayClass, clone, small });
 const ACT = {
+  ...G.ACT,
+  modePop: () => { S.modePop = true; render(); },
+  modePopX: () => { S.modePop = false; render(); },
+  gMode: (el) => { S.modePop = false; G.setMode(el.dataset.v); },
   lv: (el) => { S.loginView = el.dataset.v; S.loginErr = ''; S.loginMsg = ''; render(); },
   doLogin: async () => {
     const em = document.getElementById('em').value.trim(), pw = document.getElementById('pw').value;
@@ -1878,6 +1946,7 @@ function setField(el, live) {
 }
 $app.addEventListener('input', (e) => {
   const el = e.target;
+  if (G.onInput(el, true)) return;
   if (el.dataset.wa) { const v = document.getElementById('waVal'); if (v) v.textContent = el.value + '%'; return; }
   if (!S.sheet) return;
   if (salLive(el)) return;
@@ -1886,6 +1955,7 @@ $app.addEventListener('input', (e) => {
 });
 $app.addEventListener('change', async (e) => {
   const el = e.target;
+  if (G.onInput(el, false)) return;
   if (el.dataset.wa) { saveSettings({ ...S.settings, wAlpha: +el.value }); return; }
   if (el.id === 'imp' && el.files[0]) {
     try {
@@ -1943,7 +2013,7 @@ window.__pbOpen = openAt;
 D.onUser((user) => {
   if (unwatch) { unwatch(); unwatch = null; }
   if (BR) { try { if (user) BR.setAuth(user.refreshToken, user.uid); else BR.clearAuth(); } catch (e) { /* 무시 */ } }
-  S.user = user || null; S.settings = null; S.loaded = {}; S.sheet = null;
+  S.user = user || null; S.settings = null; S.loaded = {}; S.sheet = null; S.mode = 'pb'; S.gbUnlock = false; S.modePop = false; S.gbConfMem = null;
   D.COLS.forEach((c) => { S[c] = []; });
   if (user) {
     let first = true;
@@ -1957,7 +2027,7 @@ D.onUser((user) => {
     }, (err, name) => {
       console.error(err);
       if (name && !S.loaded[name]) { S.loaded[name] = true; render(); }
-      toast(name === 'projects' ? '플젝북을 불러오지 못했어요' : '데이터를 불러오지 못했어요');
+      toast(name === 'projects' ? '플젝북을 불러오지 못했어요' : (name || '').startsWith('gb') ? '가계부를 불러오지 못했어요' : '데이터를 불러오지 못했어요');
     });
   }
   render();

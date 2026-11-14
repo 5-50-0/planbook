@@ -1,8 +1,8 @@
-name: 안드로이드 설치 파일
+name: 빌드 확인용 (배포 안 함)
 
 on:
   push:
-    branches: [main]
+    branches: [build-check]
     paths: ['android/**', '.github/workflows/android.yml']
   workflow_dispatch:
 
@@ -24,12 +24,3 @@ jobs:
       - name: 설치 파일 만들기
         working-directory: android
         run: gradle :app:assembleRelease --no-daemon --stacktrace
-      - name: 이름 정리
-        run: cp android/app/build/outputs/apk/release/app-release.apk planbook.apk
-      - name: 릴리스에 올리기
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: app-${{ github.run_number }}
-          name: 플랜북 앱 ${{ github.run_number }}
-          make_latest: true
-          files: planbook.apk

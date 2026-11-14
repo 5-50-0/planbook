@@ -165,7 +165,7 @@ export function setupGb(X) {
     }
     const from = ymd(new Date(y, m, 1)), to = ymd(new Date(y, m + 1, 0));
     const l = entries(from, to);
-    let h = headMonth(y, m, tools('gMPrev', 'gMNext')) + tabs([['day', '일일'], ['cal', '달력'], ['mon', '월별']], tab, 'gTab') + sumBar(incOf(l), expOf(l));
+    let h = headMonth(y, m, tools('gMPrev', 'gMNext')) + tabs([['day', '일일'], ['cal', '달력'], ['mon', '월별']], tab, 'gTab') + (tab === 'cal' ? '<div style="height:8px"></div>' : sumBar(incOf(l), expOf(l)));
     if (tab === 'day') {
       const by = new Map();
       l.filter((e) => e.date <= todayStr() || e.src === 'tx').sort(sortE).forEach((e) => { if (!by.has(e.date)) by.set(e.date, []); by.get(e.date).push(e); });

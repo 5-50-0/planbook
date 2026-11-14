@@ -1150,9 +1150,10 @@ function closeSheet(fromPop) {
 }
 window.addEventListener('popstate', () => closeSheet(true));
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden || !(S.unlocked || S.gbUnlock)) return;
-  S.unlocked = false; S.gbUnlock = false;
-  if (S.sheet && (S.sheet.kind === 'ct' || S.sheet.kind === 'bn' || (S.mode === 'gb' && S.sheet.kind !== 'pin'))) closeSheet(); else render();
+  // 가계부는 한 번 열면 새로 열 때까지 그대로. 연봉 기록만 다시 잠금
+  if (!document.hidden || !S.unlocked) return;
+  S.unlocked = false;
+  if (S.sheet && (S.sheet.kind === 'ct' || S.sheet.kind === 'bn')) closeSheet(); else if (S.mode !== 'gb') render();
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (S.modePop) { S.modePop = false; render(); } else closeSheet(); } });
 

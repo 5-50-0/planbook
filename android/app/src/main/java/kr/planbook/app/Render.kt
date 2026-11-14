@@ -12,12 +12,28 @@ import java.time.LocalDate
 
 // 위젯 그림 그리기 (플랜북 B 스타일)
 object Render {
-    private val INK = Color.parseColor("#111111")
-    private val MUTED = Color.parseColor("#6B6B6B")
-    private val LINE = Color.parseColor("#E6E6E6")
-    private val RED = Color.parseColor("#C0392B")
-    private val BLUE = Color.parseColor("#1F4FB8")
-    private val FAINT = Color.parseColor("#BBBBBB")
+    // 위젯 색 (기본 / 다크)
+    class Th(val dark: Boolean, alphaPct: Int) {
+        val bg: Int = Color.argb(((100 - alphaPct.coerceIn(0, 100)) * 255) / 100, if (dark) 28 else 255, if (dark) 28 else 255, if (dark) 30 else 255)
+        val ink = Color.parseColor(if (dark) "#EDEDED" else "#111111")
+        val muted = Color.parseColor(if (dark) "#9A9A9A" else "#6B6B6B")
+        val line = if (dark) Color.argb(40, 255, 255, 255) else Color.parseColor("#E6E6E6")
+        val red = Color.parseColor(if (dark) "#FF7B6E" else "#C0392B")
+        val blue = Color.parseColor(if (dark) "#7FA7FF" else "#1F4FB8")
+        val faint = Color.parseColor(if (dark) "#5A5A5A" else "#BBBBBB")
+        val onInk = Color.parseColor(if (dark) "#111111" else "#FFFFFF")
+        // 일정 칸 색: 다크에서는 어둡게 눌러서
+        fun chip(c: Int): Int = if (!dark) c else Color.rgb((Color.red(c) * 0.42f).toInt(), (Color.green(c) * 0.42f).toInt(), (Color.blue(c) * 0.42f).toInt())
+        fun chipText(c: Int): Int = if (dark) Color.parseColor("#EDEDED") else Model.textOn(c)
+    }
+    private var T = Th(false, 0)
+    fun theme(m: Model?) { T = if (m == null) Th(false, 0) else Th(m.widgetDark, m.widgetAlpha) }
+    private val INK get() = T.ink
+    private val MUTED get() = T.muted
+    private val LINE get() = T.line
+    private val RED get() = T.red
+    private val BLUE get() = T.blue
+    private val FAINT get() = T.faint
     private val EN = arrayOf("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
     private val WD = arrayOf("일", "월", "화", "수", "목", "금", "토")
 
@@ -29,7 +45,7 @@ object Render {
         val cv = Canvas(bmp)
         val path = Path().apply { addRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), 22 * dp, 22 * dp, Path.Direction.CW) }
         cv.clipPath(path)
-        cv.drawColor(Color.WHITE)
+        cv.drawColor(T.bg)
         return bmp to cv
     }
 
@@ -76,35 +92,42 @@ object Render {
         return bmp
     }
 
-    // 월간 위젯: 위 1/6은 머리, 아래 5/6은 6주
+    const val HEAD = 0.1f // 위젯 레이아웃(머리 1 : 칸 9)과 맞춤
+    fun weeksOf(grid: List<List<LocalDate>>, mo: Int): Int = if (grid[5][0].monthValue != mo) 5 else 6
+
+    // 월간 위젯
     fun month(m: Model, w: Int, h: Int, dp: Float, today: LocalDate): Bitmap {
         val (bmp, cv) = base(w, h, dp)
         val y = today.year; val mo = today.monthValue
         val grid = Model.monthGrid(y, mo)
         val list = m.all(grid[0][0], grid[5][6])
         val pad = 10 * dp
-        val headH = h / 6f
-        val rowH = (h - headH) / 6f
+        // 위 1/10: 머리(월 · 요일), 아래 9/10: 그 달 주 수(5 또는 6)만큼 나눔
+        val headH = h * HEAD
+        val nRows = weeksOf(grid, mo)
+        val rowH = (h - headH) / nRows
         val colW = (w - pad * 2) / 7f
 
-        // 머리: 큰 월 숫자 + 연도/영문 월 + 요일 줄
-        val wdSize = minOf(10 * dp, headH * 0.22f)
-        val bigSize = minOf(headH * 0.62f, 40 * dp)
+        // 머리: 월 숫자 + 연도/영문 월 + 동기화 / 요일 줄
+        val wdH = headH * 0.34f
+        val numArea = headH - wdH
+        val wdSize = minOf(10 * dp, wdH * 0.62f)
+        val bigSize = minOf(numArea * 0.92f, 32 * dp)
         val big = p(INK, bigSize, light())
-        val numBase = headH - wdSize - 6 * dp
+        val numBase = numArea - 2 * dp
         cv.drawText(mo.toString(), pad, numBase, big)
         val nx = pad + big.measureText(mo.toString()) + 6 * dp
-        val smallSize = minOf(10 * dp, bigSize * 0.3f)
-        cv.drawText(y.toString(), nx, numBase - smallSize * 1.25f, p(MUTED, smallSize))
+        val smallSize = minOf(9 * dp, bigSize * 0.3f)
+        cv.drawText(y.toString(), nx, numBase - smallSize * 1.35f, p(MUTED, smallSize))
         cv.drawText(EN[mo - 1], nx, numBase, p(INK, smallSize * 1.2f, medium()))
         val wdp = p(MUTED, wdSize)
         for (i in 0 until 7) {
             wdp.color = if (i == 0) RED else if (i == 6) BLUE else MUTED
-            cv.drawText(WD[i], pad + colW * i + 3 * dp, headH - 3 * dp, wdp)
+            cv.drawText(WD[i], pad + colW * i + 3 * dp, headH - 4 * dp, wdp)
         }
         cv.drawRect(pad, headH, w - pad, headH + 1.5f * dp, p(INK, 0f))
-        val ic = minOf(18 * dp, headH * 0.42f)
-        syncIcon(cv, w - pad - ic - 2 * dp, 8 * dp, ic, INK)
+        val ic = minOf(18 * dp, numArea * 0.62f)
+        syncIcon(cv, w - pad - ic - 2 * dp, (numArea - ic) / 2 + 2 * dp, ic, INK)
 
         val numSize = minOf(11 * dp, rowH * 0.28f)
         val dateH = numSize + 5 * dp
@@ -116,18 +139,17 @@ object Render {
         val fill = Paint(Paint.ANTI_ALIAS_FLAG)
         val linePaint = p(LINE, 0f)
 
-        for (r in 0 until 6) {
+        for (r in 0 until nRows) {
             val top = headH + rowH * r
             if (r > 0) cv.drawRect(pad, top, w - pad, top + 1 * dp, linePaint)
             val days = grid[r]
-            if (r == 5 && days[0].monthValue != mo) continue
             days.forEachIndexed { c, d ->
                 val x = pad + colW * c
                 val other = d.monthValue != mo
                 if (d == today) {
                     val tw = maxOf(np.measureText(d.dayOfMonth.toString()) + 6 * dp, numSize + 6 * dp)
                     cv.drawRect(x + 1 * dp, top + 2 * dp, x + 1 * dp + tw, top + 2 * dp + numSize + 4 * dp, p(INK, 0f))
-                    np.color = Color.WHITE
+                    np.color = T.onInk
                     cv.drawText(d.dayOfMonth.toString(), x + 4 * dp, top + 2 * dp + numSize + 1 * dp, np)
                 } else {
                     np.color = if (other) FAINT else dayColor(d)
@@ -141,7 +163,7 @@ object Render {
                 val counts = IntArray(7)
                 segs.forEach { s -> for (cc in s.col until s.col + s.span) {
                     if (counts[cc] < 3) {
-                        fill.color = s.ev.color
+                        fill.color = T.chip(s.ev.color)
                         cv.drawCircle(pad + colW * cc + 6 * dp + counts[cc] * (r2 * 2.6f), top + rowH - r2 * 2.2f, r2, fill)
                     }
                     counts[cc]++
@@ -153,9 +175,9 @@ object Render {
                     val x0 = pad + colW * s.col + 1 * dp
                     val x1 = pad + colW * (s.col + s.span) - 1 * dp
                     val y0 = top + dateH + s.lane * (laneH + 2 * dp)
-                    fill.color = s.ev.color
+                    fill.color = T.chip(s.ev.color)
                     cv.drawRect(x0, y0, x1, y0 + laneH, fill)
-                    chipText.color = Model.textOn(s.ev.color)
+                    chipText.color = T.chipText(s.ev.color)
                     clipText(cv, s.ev.title, x0 + 3 * dp, y0 + laneH * 0.74f, x1 - x0 - 5 * dp, chipText)
                 }
                 val mp = p(MUTED, minOf(9 * dp, numSize))
@@ -198,9 +220,9 @@ object Render {
         val show = if (list.size > fit) fit - 1 else list.size
         for (i in 0 until maxOf(show, 0)) {
             val e = list[i]
-            fill.color = e.color
+            fill.color = T.chip(e.color)
             cv.drawRect(pad, y, w - pad, y + boxH, fill)
-            tp.color = Model.textOn(e.color)
+            tp.color = T.chipText(e.color)
             clipText(cv, e.title, pad + 7 * dp, y + boxH * 0.68f, w - pad * 2 - 12 * dp, tp)
             y += boxH + gap
         }

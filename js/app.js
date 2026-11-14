@@ -49,7 +49,7 @@ const S = {
   rtTab: 'rt', user: undefined, items: [], notes: [], records: [], routines: [], yb: [], projects: [], settings: null, pjTab: 'progress', pjId: null,
   loaded: {}, view: 'month', sel: todayStr(), month: null,
   loginView: 'login', loginErr: '', loginMsg: '', busy: false,
-  sheet: null, acc: { cats: false, topics: false, data: false, acct: false },
+  sheet: null, acc: { screen: false, widget: false, cats: false, topics: false, data: false, acct: false },
   toast: '', delArm: false, mbTab: 'meet', year: new Date().getFullYear(), topic: null,
 };
 let unwatch = null;
@@ -443,6 +443,16 @@ function settingsBody() {
   const st = S.settings;
   const A = S.acc;
   let h = `<div class="head"><div class="big"><h1 class="word">설정</h1></div>${wide() ? '' : `<div class="tools"><button class="ico" aria-label="닫기" data-act="nav" data-v="month">${IC.x}</button></div>`}</div><div class="setpage">`;
+  const seg = (act, opts, cur) => `<div class="seg">${opts.map(([v, l]) => `<button class="${v === cur ? 'on' : ''}" data-act="${act}" data-v="${v}">${l}</button>`).join('')}</div>`;
+  h += `<button class="acc" data-act="acc" data-v="screen"><span>화면</span><span>${A.screen ? '−' : '+'}</span></button>`;
+  if (A.screen) h += `<div class="setbox"><span class="lb">앱 테마</span>${seg('themeSet', [['light', '기본'], ['dark', '다크']], st.theme === 'dark' ? 'dark' : 'light')}</div>`;
+  h += `<button class="acc" data-act="acc" data-v="widget"><span>위젯</span><span>${A.widget ? '−' : '+'}</span></button>`;
+  if (A.widget) {
+    const wa = Math.max(0, Math.min(100, +st.wAlpha || 0));
+    h += `<div class="setbox"><span class="lb">위젯 테마</span>${seg('wThemeSet', [['light', '기본'], ['dark', '다크']], st.wTheme === 'dark' ? 'dark' : 'light')}
+      <div class="rngh"><span class="lb">배경 투명도</span><b id="waVal">${wa}%</b></div>
+      <input type="range" class="rng" min="0" max="100" step="5" value="${wa}" data-wa="1" aria-label="배경 투명도"></div>`;
+  }
   h += `<button class="acc" data-act="acc" data-v="cats"><span>분류와 색</span><span>${A.cats ? '−' : '+'}</span></button>`;
   if (A.cats) {
     h += `<button class="row hl" data-act="defCat"><b>기본 분류</b><span class="vl">${esc(catLabel({ cat: st.defCat, sub: st.defSub }) || '없음')}</span></button>`;
@@ -1056,7 +1066,20 @@ const SAL_ACT = {
 
 // ---------- 전체 그리기 ----------
 const ALL_LOADED = () => S.settings && D.COLS.every((c) => S.loaded[c]);
+let lastDark = null;
+function applyTheme() {
+  let dark;
+  if (S.user && S.settings) dark = S.settings.theme === 'dark';
+  else { try { dark = localStorage.getItem('pb_theme') === 'dark'; } catch (e) { dark = false; } }
+  if (dark === lastDark) return;
+  lastDark = dark;
+  document.documentElement.classList.toggle('dark', dark);
+  const mt = document.querySelector('meta[name="theme-color"]'); if (mt) mt.content = dark ? '#121212' : '#ffffff';
+  try { localStorage.setItem('pb_theme', dark ? 'dark' : 'light'); } catch (e) { /* 무시 */ }
+  try { if (window.PlanbookBridge && window.PlanbookBridge.setTheme) window.PlanbookBridge.setTheme(dark); } catch (e) { /* 무시 */ }
+}
 function render() {
+  applyTheme();
   if (S.user === undefined) { $app.innerHTML = '<div class="wait">불러오는 중</div>'; return; }
   if (!S.user) { $app.innerHTML = loginHtml(); return; }
   if (!ALL_LOADED()) { $app.innerHTML = '<div class="wait">불러오는 중</div>'; return; }
@@ -1649,6 +1672,8 @@ const ACT = {
   },
 
   // 설정
+  themeSet: (el) => { saveSettings({ ...S.settings, theme: el.dataset.v }); render(); },
+  wThemeSet: (el) => { saveSettings({ ...S.settings, wTheme: el.dataset.v }); render(); },
   acc: (el) => { S.acc[el.dataset.v] = !S.acc[el.dataset.v]; render(); if (el.dataset.v === 'data' && S.acc.data) refreshCheckStatus(); },
   sync: () => doSync(),
   ckOpen: async () => { openSheet({ kind: 'check', busy: true }); try { const r = await runCheck(); if (S.sheet?.kind === 'check') { S.sheet.r = r; S.sheet.busy = false; } S.ckStatus = !r.bk ? 'none' : r.less ? 'less' : 'ok'; } catch (e) { console.error(e); closeSheet(); toast('점검하지 못했어요. 인터넷 연결을 확인해 주세요'); } render(); },
@@ -1853,6 +1878,7 @@ function setField(el, live) {
 }
 $app.addEventListener('input', (e) => {
   const el = e.target;
+  if (el.dataset.wa) { const v = document.getElementById('waVal'); if (v) v.textContent = el.value + '%'; return; }
   if (!S.sheet) return;
   if (salLive(el)) return;
   if (el.dataset.f) setField(el, true);
@@ -1860,6 +1886,7 @@ $app.addEventListener('input', (e) => {
 });
 $app.addEventListener('change', async (e) => {
   const el = e.target;
+  if (el.dataset.wa) { saveSettings({ ...S.settings, wAlpha: +el.value }); return; }
   if (el.id === 'imp' && el.files[0]) {
     try {
       const raw = JSON.parse(await el.files[0].text());

@@ -24,6 +24,9 @@ class Model(data: JSONObject?) {
     private val routines: JSONArray = data?.optJSONArray("routines") ?: JSONArray()
     private val settings: JSONObject = data?.optJSONObject("settings") ?: JSONObject()
     val hasData = data != null
+    // 위젯 모양 (설정 > 위젯)
+    val widgetDark: Boolean get() = settings.optString("wTheme") == "dark"
+    val widgetAlpha: Int get() = settings.optInt("wAlpha", 0).coerceIn(0, 100) // 투명도 %
 
     private fun parseColor(s: String?, def: String): Int = try { Color.parseColor(if (s.isNullOrEmpty()) def else s) } catch (e: Exception) { Color.parseColor(def) }
 

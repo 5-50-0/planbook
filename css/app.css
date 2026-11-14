@@ -377,3 +377,25 @@ table.sal tr.co td{background:#F4F4F4;font-weight:500;font-size:12px;color:#111;
 .ybview .yc{cursor:default}
 .ybed .ygrid{outline:2px solid #111;outline-offset:4px}
 .tools>*{flex:none}
+
+/* 설정: 화면 · 위젯 */
+.setbox{padding:2px 2px 16px}
+.setbox .lb{margin-top:12px}
+.seg{display:flex;border:1.5px solid #111;height:42px}
+.seg button{flex:1;font-size:14px}
+.seg button+button{border-left:1px solid #111}
+.seg button.on{background:#111;color:#fff;font-weight:500}
+.rngh{display:flex;justify-content:space-between;align-items:flex-end}
+.rngh b{font-weight:500;font-size:14px;margin-bottom:6px}
+.rng{-webkit-appearance:none;appearance:none;height:28px;padding:0;border:none;background:transparent;outline:none}
+.rng::-webkit-slider-runnable-track{height:2px;background:#E6E6E6}
+.rng::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;border:1.5px solid #111;margin-top:-10px}
+.rng::-moz-range-track{height:2px;background:#E6E6E6}
+.rng::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#fff;border:1.5px solid #111}
+.rng:focus{outline:none}
+
+/* 다크 모드: 화면 전체를 뒤집어 어둡게 */
+html.dark{background:#121212}
+html.dark body{filter:invert(.93) hue-rotate(180deg)}
+html.dark .dim{background:rgba(255,255,255,.55)}
+html.dark .sitem.lift{box-shadow:0 6px 18px rgba(255,255,255,.25)}

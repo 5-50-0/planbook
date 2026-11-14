@@ -109,6 +109,20 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun refresh() { Widgets.syncNow(this@MainActivity) }
 
+        // 앱 테마에 맞춰 위 · 아래 막대 색 바꾸기
+        @JavascriptInterface
+        fun setTheme(dark: Boolean) {
+            runOnUiThread {
+                val c = if (dark) android.graphics.Color.parseColor("#121212") else android.graphics.Color.WHITE
+                window.statusBarColor = c
+                window.navigationBarColor = c
+                web.setBackgroundColor(c)
+                val ctl = androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
+                ctl.isAppearanceLightStatusBars = !dark
+                ctl.isAppearanceLightNavigationBars = !dark
+            }
+        }
+
         @JavascriptInterface
         fun saveFile(base64: String, name: String, mime: String) {
             val ok = try {

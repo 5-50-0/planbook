@@ -56,6 +56,7 @@ object Widgets {
         val today = Model.today()
         val hasAuth = Store.uid(ctx) != null
         val m = Model(Store.loadData(ctx))
+        Render.theme(m)
         val bmp = if (!hasAuth) Render.message(w, h, dp, "플랜북 앱에서 로그인해 주세요")
             else if (!m.hasData) Render.message(w, h, dp, "불러오는 중")
             else Render.month(m, w, h, dp, today)
@@ -63,6 +64,7 @@ object Widgets {
         rv.setOnClickPendingIntent(R.id.head, openIntent(ctx, null, "month", 1000 + id % 1000))
         rv.setOnClickPendingIntent(R.id.sync, syncIntent(ctx))
         val grid = Model.monthGrid(today.year, today.monthValue)
+        rv.setViewVisibility(R.id.r5, if (Render.weeksOf(grid, today.monthValue) == 6) android.view.View.VISIBLE else android.view.View.GONE)
         val ids = arrayOf(
             intArrayOf(R.id.c00, R.id.c01, R.id.c02, R.id.c03, R.id.c04, R.id.c05, R.id.c06),
             intArrayOf(R.id.c10, R.id.c11, R.id.c12, R.id.c13, R.id.c14, R.id.c15, R.id.c16),
@@ -86,6 +88,7 @@ object Widgets {
         val today = Model.today()
         val hasAuth = Store.uid(ctx) != null
         val m = Model(Store.loadData(ctx))
+        Render.theme(m)
         val bmp = if (!hasAuth) Render.message(w, h, dp, "플랜북 앱에서 로그인해 주세요")
             else if (!m.hasData) Render.message(w, h, dp, "불러오는 중")
             else Render.today(m, w, h, dp, today)

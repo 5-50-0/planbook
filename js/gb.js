@@ -329,8 +329,10 @@ export function setupGb(X) {
     const tot = Math.abs(bs) + Math.abs(ss) + Math.abs(cs) + Math.abs(ls) || 1;
     let h = headWord('에셋북', '', tools('', '', `<button class="ico ${wide() ? 'bd' : ''}" aria-label="통장 추가" data-act="gAccNew">${IC.plus}</button>`));
     h += `<div class="gpad gbot"><div class="gnet"><small>순자산</small><b>${won(net)}</b></div>`;
-    h += `<div class="gstk"><i style="flex:${Math.abs(bs) / tot};background:#111"></i><i style="flex:${Math.abs(ss) / tot};background:#8A8A8A"></i><i style="flex:${Math.abs(cs) / tot};background:#C0392B"></i><i style="flex:${Math.abs(ls) / tot};background:#6B3FA0"></i></div>`;
-    h += `<div class="glg"><span><i style="background:#111"></i>통장</span><span><i style="background:#8A8A8A"></i>저축</span><span><i style="background:#C0392B"></i>신용카드</span>${loan.length ? '<span><i style="background:#6B3FA0"></i>대출</span>' : ''}</div>`;
+    // 막대·범례: 통장마다 그 통장 색으로 (통장 → 저축 → 신용카드 → 대출)
+    const parts = [...bank, ...sav, ...card, ...loan].map((a) => [a, Math.abs(balance(a))]).filter(([, v]) => v);
+    h += `<div class="gstk">${parts.map(([a, v]) => `<i style="flex:${v / tot};background:${accColor(a)}"></i>`).join('')}</div>`;
+    h += `<div class="glg">${parts.map(([a]) => `<span><i style="background:${accColor(a)}"></i>${esc(a.name)}</span>`).join('')}</div>`;
     const arow = (a, sub = '') => `<button class="gac" data-act="gAccOpen" data-id="${a.id}"><span class="sw" style="background:${accColor(a)}"></span><span class="t">${esc(a.name)}${sub ? `<small>${sub}</small>` : ''}</span><span class="v">${a.type === 'card' ? '<small class="mut">낸 금액 / 남은 금액</small>' : won(balance(a))}</span></button>`;
     const fxIn = (a) => { const f = S.gbFixed.find((x) => x.type === 'tr' && x.to === a.id && (!x.end || x.end >= todayStr())); return f ? `매월 ${f.day}일 · ${won(f.amount)}` : ''; };
     h += `<div class="gsec"><span>통장</span><small>${won(bs)}</small></div>${bank.map((a) => arow(a)).join('') || '<p class="empty" style="padding:10px 2px">없음</p>'}`;

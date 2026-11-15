@@ -430,16 +430,40 @@ export function setupGb(X) {
   const sel = (label, f, opts, cur, empty) => `<div class="gfld"><label class="lb" for="g_${f}">${label}</label><select id="g_${f}" data-gf="${f}">${empty ? opt('', empty, cur) : ''}${opts.map(([v, l]) => opt(v, l, cur)).join('')}</select></div>`;
   const inp = (label, f, val, type = 'text', extra = '') => `<div class="gfld"><label class="lb" for="g_${f}">${label}</label><input id="g_${f}" type="${type}" data-gf="${f}" value="${esc(val ?? '')}" ${extra}></div>`;
   const accOpts = (types) => accs().filter((a) => types.includes(a.type)).map((a) => [a.id, a.name]);
-  const amtBand = (color, d) => `<div class="band in gband" style="background:${color};color:${textOn(color)}"><input id="g_title" data-gf="title" value="${esc(d.title || '')}" placeholder="내용" autocomplete="off" style="color:inherit"><input id="g_amount" data-gf="amount" inputmode="numeric" autocomplete="off" value="${d.amount ? commas(d.amount) : ''}" placeholder="0" style="color:inherit"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div>`;
+  const amtBand = (color, d) => `<div class="band in gband" style="background:${color};color:${textOn(color)}"><input id="g_title" data-gf="title" value="${esc(d.title || '')}" autocomplete="off" style="color:inherit"><input id="g_amount" data-gf="amount" inputmode="numeric" autocomplete="off" value="${d.amount ? commas(d.amount) : ''}" style="color:inherit"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div>`;
   function catSel(kind, d) {
     const cs = catList(kind);
     const c = catOf(kind, d.cat);
     return `<div class="two">${sel('대분류', 'cat', cs.map((x) => [x.id, x.name]), d.cat, '고르기')}${sel('소분류', 'sub', (c?.subs || []).map((x) => [x.id, x.name]), d.sub, (c?.subs || []).length ? '없음' : '없음')}</div>`;
   }
+  // 자동완성: 예전에 쓴 내역에서 같은 내용을 찾아 자주 쓴 순서로
+  function sugList(type, q) {
+    const map = new Map();
+    S.gbTx.filter((t) => t.type === type && (t.title || '').trim()).forEach((t) => {
+      const k = t.title.trim();
+      const m = map.get(k) || { n: 0, last: null };
+      m.n++;
+      if (!m.last || t.date > m.last.date || (t.date === m.last.date && (t.created || 0) > (m.last.created || 0))) m.last = t;
+      map.set(k, m);
+    });
+    const qq = (q || '').trim().toLowerCase();
+    return [...map.entries()].filter(([k]) => !qq || (k.toLowerCase().includes(qq) && k.toLowerCase() !== qq))
+      .sort((a, b) => (qq ? (b[0].toLowerCase().startsWith(qq) - a[0].toLowerCase().startsWith(qq)) : 0) || b[1].n - a[1].n || (a[1].last.date < b[1].last.date ? 1 : -1))
+      .slice(0, qq ? 5 : 6).map(([k, m]) => m.last);
+  }
+  function sugHtml(sh) {
+    if (!sh.isNew || sh.sugOff) return '';
+    const d = sh.draft, q = d.title || '';
+    const l = sugList(d.type, q);
+    sh.sug = l;
+    if (!l.length) return '';
+    if (!q.trim()) return `<div class="gsugc">${l.map((t, i) => `<button data-act="gSug" data-i="${i}">${esc(t.title)}</button>`).join('')}</div>`;
+    return `<div class="gsugl">${l.map((t, i) => `<button data-act="gSug" data-i="${i}"><span>${esc(t.title)}<small>${t.type === 'tr' ? `${esc(accName(t.acc))} → ${esc(accName(t.to))}` : `${esc(catName(t.type, t.cat, t.sub))} · ${esc(accName(t.acc))}`}</small></span><b>${won(t.amount)}</b></button>`).join('')}</div>`;
+  }
   function txHtml() {
     const sh = S.sheet, d = sh.draft;
     const color = d.type === 'tr' ? '#D9D9D9' : catOf(d.type, d.cat)?.color || '#E6E6E6';
-    let h = amtBand(color, d);
+    let h = amtBand(color, d) + `<div id="gsug">${sugHtml(sh)}</div>`;
     h += `<div class="gform">${seg([['exp', '지출'], ['inc', '수입'], ['tr', '이체']], d.type, 'gTxType')}`;
     if (d.type === 'tr') {
       h += inp('날짜', 'date', d.date, 'date');
@@ -451,7 +475,7 @@ export function setupGb(X) {
       if (d.type === 'exp' && accOf(d.acc)?.type === 'card') {
         const n = +d.inst || 1, preset = [1, 3, 6, 12];
         const custom = sh.instCustom || !preset.includes(n);
-        h += `<div class="gfld"><span class="lb">할부</span><div class="gchips">${preset.map((k) => `<button class="${!custom && n === k ? 'on' : ''}" data-act="gInst" data-v="${k}">${k === 1 ? '일시불' : k + '개월'}</button>`).join('')}<button class="${custom ? 'on' : ''}" data-act="gInst" data-v="c">직접</button></div>${custom ? `<input data-gf="inst" inputmode="numeric" value="${n > 1 ? n : ''}" placeholder="개월 수" style="margin-top:8px">` : ''}${n > 1 && d.amount ? `<p class="mut" style="font-size:12.5px;margin:6px 0 0">매달 ${won(Math.floor(d.amount / n))}</p>` : ''}</div>`;
+        h += `<div class="gfld"><span class="lb">할부</span><div class="gchips">${preset.map((k) => `<button class="${!custom && n === k ? 'on' : ''}" data-act="gInst" data-v="${k}">${k === 1 ? '일시불' : k + '개월'}</button>`).join('')}<button class="${custom ? 'on' : ''}" data-act="gInst" data-v="c">직접</button></div>${custom ? `<input data-gf="inst" inputmode="numeric" value="${n > 1 ? n : ''}" style="margin-top:8px">` : ''}${n > 1 && d.amount ? `<p class="mut" style="font-size:12.5px;margin:6px 0 0">매달 ${won(Math.floor(d.amount / n))}</p>` : ''}</div>`;
       }
     }
     h += inp('메모', 'memo', d.memo);
@@ -476,7 +500,7 @@ export function setupGb(X) {
     catList('exp').forEach((c) => {
       h += `<div class="ggh" style="margin-top:4px"><b>${esc(c.name)}</b><span id="gbt_${c.id}">${won(sum((c.subs || []).length ? c.subs : [c], (s) => b[s.id] || 0))}</span></div>`;
       const list = (c.subs || []).length ? c.subs : [c];
-      list.forEach((s) => { h += `<div class="gbin"><span>${esc(s.name)}</span><input data-gb="${s.id}" data-c="${c.id}" inputmode="numeric" value="${b[s.id] ? commas(b[s.id]) : ''}" placeholder="0"></div>`; });
+      list.forEach((s) => { h += `<div class="gbin"><span>${esc(s.name)}</span><input data-gb="${s.id}" data-c="${c.id}" inputmode="numeric" value="${b[s.id] ? commas(b[s.id]) : ''}"></div>`; });
     });
     h += `<div class="ggh"><b>합계</b><span id="gbt_all">${won(Object.values(b).reduce((s, v) => s + (v || 0), 0))}</span></div>`;
     return h + `</div><div class="acts"><button class="btn" data-act="close">닫기</button><button class="btn pri" data-act="gBudSave">저장</button></div>`;
@@ -484,10 +508,10 @@ export function setupGb(X) {
   function accHtml() {
     const sh = S.sheet, a = sh.draft;
     const col = a.color || ACC_COL[a.type];
-    let h = `<div class="band in" style="background:${col};color:${textOn(col)}"><input id="g_name" data-gf="name" value="${esc(a.name || '')}" placeholder="이름" autocomplete="off" style="color:inherit"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div><div class="gform">`;
+    let h = `<div class="band in" style="background:${col};color:${textOn(col)}"><input id="g_name" data-gf="name" value="${esc(a.name || '')}" autocomplete="off" style="color:inherit"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div><div class="gform">`;
     h += seg([['bank', '통장'], ['saving', '저축'], ['card', '신용카드']], a.type, 'gAccType');
     h += colField(sh, col);
-    if (a.type !== 'card') h += `<div class="gfld"><label class="lb" for="g_bal">현재 잔액</label><input id="g_bal" data-gf="bal" inputmode="numeric" value="${a.bal != null ? commas(a.bal) : ''}" placeholder="0"></div>`;
+    if (a.type !== 'card') h += `<div class="gfld"><label class="lb" for="g_bal">현재 잔액</label><input id="g_bal" data-gf="bal" inputmode="numeric" value="${a.bal != null ? commas(a.bal) : ''}"></div>`;
     if (!sh.isNew) {
       const n = refCount('acc', a.id);
       if (sh.delMode) {
@@ -510,10 +534,10 @@ export function setupGb(X) {
   }
   function catHtml() {
     const sh = S.sheet, c = sh.draft;
-    let h = `<div class="band in" style="background:${c.color};color:${textOn(c.color)}"><input id="g_name" data-gf="name" value="${esc(c.name || '')}" placeholder="분류 이름" autocomplete="off" style="color:inherit"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div><div class="gform">`;
+    let h = `<div class="band in" style="background:${c.color};color:${textOn(c.color)}"><input id="g_name" data-gf="name" value="${esc(c.name || '')}" autocomplete="off" style="color:inherit"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div><div class="gform">`;
     h += colField(sh, c.color);
     h += '<div class="gfld"><span class="lb">소분류</span>';
-    (c.subs || []).forEach((s, i) => { h += `<div class="gsubrow"><input data-gs="${i}" value="${esc(s.name)}" placeholder="소분류 이름"><button class="ico" aria-label="빼기" data-act="gSubDel" data-i="${i}">${IC.x}</button></div>`; });
+    (c.subs || []).forEach((s, i) => { h += `<div class="gsubrow"><input data-gs="${i}" value="${esc(s.name)}"><button class="ico" aria-label="빼기" data-act="gSubDel" data-i="${i}">${IC.x}</button></div>`; });
     h += `<button class="row" data-act="gSubAdd" style="font-size:14px">${small(IC.plus)}소분류 추가</button></div>`;
     if (sh.delMode) {
       const n = refCount('cat', c.id);
@@ -568,6 +592,15 @@ export function setupGb(X) {
     gFab: () => ACT.gNew(null),
     gTxOpen: (el) => { const t = S.gbTx.find((x) => x.id === el.dataset.id); if (!t) return; const sh = { kind: 'gtx', isNew: false, draft: { inst: 1, ...clone(t) } }; if (S.sheet) { S.sheet = sh; S.delArm = false; render(); } else openSheet(sh); },
     gTxType: (el) => { const d = S.sheet.draft; d.type = el.dataset.v; d.cat = ''; d.sub = ''; if (d.type !== 'exp') d.inst = 1; if (d.type !== 'exp' && accOf(d.acc)?.type === 'card') d.acc = accs().find((a) => a.type !== 'card')?.id || ''; render(); },
+    gSug: (el) => {
+      const sh = S.sheet, t = (sh.sug || [])[+el.dataset.i];
+      if (!t) return;
+      const d = sh.draft;
+      Object.assign(d, { title: t.title, cat: t.cat || '', sub: t.sub || '', acc: t.acc || d.acc, to: t.to || '', amount: t.inst > 1 ? d.amount || t.amount : t.amount, inst: 1 });
+      if (t.acc && !accOf(t.acc)) d.acc = accs()[0]?.id || '';
+      sh.sugOff = true;
+      render();
+    },
     gInst: (el) => { const sh = S.sheet; if (el.dataset.v === 'c') { sh.instCustom = true; } else { sh.instCustom = false; sh.draft.inst = +el.dataset.v; } render(); },
     gTxSave: () => {
       const sh = S.sheet, d = { ...sh.draft };
@@ -753,6 +786,12 @@ export function setupGb(X) {
       const sw = document.querySelector('.sheet .gcolrow .sw'); if (sw) sw.style.background = v;
       const tx = document.querySelector('.sheet .gcolrow span:nth-child(2)'); if (tx) tx.textContent = v;
       const other = document.querySelector(f === 'pick' ? '.sheet [data-gf="hex"]' : '.sheet [data-gf="pick"]'); if (other) other.value = f === 'pick' ? v : v.toLowerCase();
+      return true;
+    }
+    if (f === 'title' && sh.kind === 'gtx') {
+      d.title = el.value;
+      if (live) sh.sugOff = false;
+      if (sh.isNew && live) { const box = document.getElementById('gsug'); if (box) box.innerHTML = sugHtml(sh); }
       return true;
     }
     if (f === 'inst') { d.inst = Math.max(1, Math.min(60, +el.value.replace(/[^\d]/g, '') || 1)); if (!live) render(); return true; }

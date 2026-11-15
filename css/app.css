@@ -551,3 +551,11 @@ html.dark .sitem.lift{box-shadow:0 6px 18px rgba(255,255,255,.25)}
 .gcolrow b{font-weight:400;font-size:18px}
 .gcolbox{border:1.5px solid #111;border-top:none;padding:4px 12px 12px}
 .gcolbox .lb{margin:10px 0 6px}
+.gsugc{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.gsugc button{height:34px;padding:0 12px;border:1px solid #CFCFCF;font-size:13px}
+.gsugl{border:1.5px solid #111;border-top:none}
+.gsugl button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 12px;text-align:left;font-size:14px}
+.gsugl button+button{border-top:1px solid #E6E6E6}
+.gsugl span{flex:1;min-width:0}
+.gsugl small{display:block;font-size:11.5px;color:#8A8A8A}
+.gsugl b{font-weight:500;font-variant-numeric:tabular-nums}

@@ -1272,6 +1272,10 @@ function planMerge(cur, file) {
       (fc.subs || []).forEach((fs) => { if (!c.subs.some((x) => x.id === fs.id)) { c.subs.push(clone(fs)); ch = true; } });
     }));
     Object.entries(gcFile.budget || {}).forEach(([k, v]) => { if (!(k in after.budget)) { after.budget[k] = v; ch = true; } });
+    if (gcFile.budgetV) {
+      if (!after.budgetV) { after.budgetV = clone(gcFile.budgetV); ch = true; }
+      else Object.entries(gcFile.budgetV).forEach(([k, v]) => { if (!(k in after.budgetV)) { after.budgetV[k] = clone(v); ch = true; } });
+    }
     Object.keys(gcFile).forEach((k) => { if (k !== 'updated' && !(k in after)) { after[k] = clone(gcFile[k]); ch = true; } });
     if (ch) plan.upd.push({ name: 'gbConf', before: gcCur, after });
   }

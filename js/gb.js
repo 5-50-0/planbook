@@ -213,6 +213,36 @@ export function setupGb(X) {
     return h + '</div>';
   }
 
+  // ---------- 예산 금액 (기본 예산 + 달마다 따로) ----------
+  // budgetV[key] = { base: [['YYYY-MM', 금액], ...], over: { 'YYYY-MM': 금액 } }
+  // key: 소분류 id 또는 'c:' + 대분류 id. 예전 budget(한 벌)은 처음부터 쓰던 기본 예산으로 읽음
+  const lab = (y, m) => `${y}-${String(m + 1).padStart(2, '0')}`;
+  function bv(c = conf()) {
+    if (c.budgetV) return c.budgetV;
+    const out = {};
+    const catIds = new Set(catList('exp').map((x) => x.id));
+    Object.entries(c.budget || {}).forEach(([k, v]) => { if (v > 0) out[catIds.has(k) ? 'c:' + k : k] = { base: [['0000-00', v]], over: {} }; });
+    return out;
+  }
+  function baseAt(e, L) { let v = 0; (e?.base || []).slice().sort((a, b) => (a[0] < b[0] ? -1 : 1)).forEach(([f, a]) => { if (f <= L) v = a; }); return v; }
+  function budAt(key, y, m, B = bv()) { const e = B[key]; if (!e) return 0; const L = lab(y, m); return e.over && L in e.over ? e.over[L] : baseAt(e, L); }
+  const isOver = (key, y, m, B = bv()) => !!(B[key]?.over && lab(y, m) in B[key].over);
+  function setBase(B, key, y, m, v) {
+    const L = lab(y, m), e = B[key] || (B[key] = { base: [], over: {} });
+    e.base = (e.base || []).filter(([f]) => f !== L);
+    if (baseAt(e, L) !== v) e.base.push([L, v]);
+  }
+  function setOver(B, key, y, m, v) { const e = B[key] || (B[key] = { base: [], over: {} }); e.over = e.over || {}; if (v === null) delete e.over[lab(y, m)]; else e.over[lab(y, m)] = v; }
+  // 대분류 예산이 소분류 합보다 작으면 안 됨
+  function budCheck(B, y, m) {
+    for (const c of catList('exp')) {
+      const cb = budAt('c:' + c.id, y, m, B);
+      const sb = sum(c.subs || [], (x) => budAt(x.id, y, m, B));
+      if (cb && sb > cb) return `${c.name}: 소분류 예산 합(${won(sb)})이 대분류 예산(${won(cb)})보다 커요.`;
+    }
+    return '';
+  }
+
   // ---------- 예산 ----------
   function budPage() {
     const p = period(S.gbBudOff || 0);
@@ -223,24 +253,32 @@ export function setupGb(X) {
     const upto = t < p.end ? t : p.end;
     const l = p.start <= t ? entries(p.start, upto).filter((e) => e.type === 'exp') : [];
     const left = t > p.end ? 0 : t < p.start ? Math.round((parse(p.end) - parse(p.start)) / 864e5) + 1 : Math.round((parse(p.end) - parse(t)) / 864e5) + 1;
-    const bud = conf().budget || {};
-    const fixedKeys = new Set(S.gbFixed.filter((f) => f.type === 'exp').map((f) => f.sub || f.cat));
-    const usedBy = new Map(); l.forEach((e) => { const k = e.sub || e.cat; usedBy.set(k, (usedBy.get(k) || 0) + e.amount); });
+    const B = bv(), Y = p.y, M = p.m;
+    const fixedKeys = new Set(S.gbFixed.filter((f) => f.type === 'exp' && (!f.end || f.end >= p.start)).map((f) => f.sub || 'c:' + f.cat));
+    const usedSub = new Map(), usedCat = new Map();
+    l.forEach((e) => { if (e.sub) usedSub.set(e.sub, (usedSub.get(e.sub) || 0) + e.amount); usedCat.set(e.cat, (usedCat.get(e.cat) || 0) + e.amount); });
+    const rowH = (key, n, b, u, fixed) => {
+      const pct = b ? Math.round((u / b) * 100) : 0;
+      const right = !b ? '예산 없음' : fixed ? '고정' : u > b ? `초과 ${won(u - b)}` : left ? `하루 ${won(Math.floor((b - u) / left / 100) * 100)}` : `남음 ${won(b - u)}`;
+      return `<button class="gbg" ${key ? `data-act="gBudKey" data-k="${key}"` : ''}><div class="r1"><span>${esc(n)}</span><small>${won(u)} / ${won(b)}</small></div><div class="gbar"><i class="${u > b ? 'over' : ''}" style="width:${Math.min(pct, 100)}%"></i></div><div class="r2"><span>${b ? pct + '%' : ''}</span><span class="${u > b ? 'gout' : ''}">${right}</span></div></button>`;
+    };
     let total = 0, used = 0;
     let body = '';
     catList('exp').forEach((c) => {
-      const keys = (c.subs || []).length ? c.subs.map((s) => [s.id, s.name]) : [[c.id, c.name]];
-      const extra = (c.subs || []).length && usedBy.get(c.id) ? [[c.id, `${c.name} (소분류 없음)`]] : [];
-      const rows = [...keys, ...extra].filter(([k]) => (bud[k] || 0) > 0 || usedBy.get(k));
-      if (!rows.length) return;
-      const cb = sum(rows, ([k]) => bud[k] || 0), cu = sum(rows, ([k]) => usedBy.get(k) || 0);
-      total += cb; used += cu;
-      body += `<div class="ggh"><b>${esc(c.name)}</b><span>${won(cu)} / ${won(cb)}</span></div>`;
-      rows.forEach(([k, n]) => {
-        const b = bud[k] || 0, u = usedBy.get(k) || 0, pct = b ? Math.round((u / b) * 100) : 0;
-        const right = !b ? '예산 없음' : fixedKeys.has(k) ? '고정' : u > b ? `초과 ${won(u - b)}` : left ? `하루 ${won(Math.floor((b - u) / left / 100) * 100)}` : `남음 ${won(b - u)}`;
-        body += `<button class="gbg" data-act="gBudEdit"><div class="r1"><span>${esc(n)}</span><small>${won(u)} / ${won(b)}</small></div><div class="gbar"><i class="${u > b ? 'over' : ''}" style="width:${Math.min(pct, 100)}%"></i></div><div class="r2"><span>${b ? pct + '%' : ''}</span><span class="${u > b ? 'gout' : ''}">${right}</span></div></button>`;
-      });
+      const subs = c.subs || [];
+      const cb = budAt('c:' + c.id, Y, M, B);
+      const sbs = subs.map((x) => ({ x, b: budAt(x.id, Y, M, B), u: usedSub.get(x.id) || 0 }));
+      const sbSum = sum(sbs, (r) => r.b);
+      const cu = usedCat.get(c.id) || 0;
+      const cBud = cb || sbSum;
+      if (!cBud && !cu) return;
+      total += cBud; used += cu;
+      body += `<button class="ggh gghb" data-act="gBudKey" data-k="c:${c.id}"><b>${esc(c.name)}</b><span>${won(cu)} / ${won(cBud)}${cb ? '' : ''}</span></button>`;
+      if (!subs.length) { body += rowH('c:' + c.id, '전체', cb, cu, fixedKeys.has('c:' + c.id)); return; }
+      sbs.filter((r) => r.b || r.u).forEach((r) => { body += rowH(r.x.id, r.x.name, r.b, r.u, fixedKeys.has(r.x.id)); });
+      // 그 외: 대분류 예산 중 소분류에 나누지 않은 몫, 예산 없는 소분류 · 소분류 없이 쓴 돈
+      const restU = cu - sum(sbs.filter((r) => r.b), (r) => r.u);
+      if (cb > sbSum || (cb && restU)) body += rowH('', '그 외', Math.max(0, cb - sbSum), restU, false);
     });
     const pct = total ? Math.min(100, Math.round((used / total) * 100)) : 0;
     h += `<div class="gpad gbot"><div class="gbx"><div class="l"><span>남은 예산</span><span>${left ? `남은 ${left}일` : ''}</span></div><div class="big2">${won(total - used)}</div><div class="gbar"><i class="${used > total ? 'over' : ''}" style="width:${pct}%"></i></div><div class="r"><span>${won(used)} 씀</span><span class="mut">예산 ${won(total)}</span></div></div>`;
@@ -494,16 +532,37 @@ export function setupGb(X) {
     h += '</div>' + errLine(sh) + `<div class="acts">${sh.isNew ? '<button class="btn" data-act="close">닫기</button>' : `<button class="btn del" data-act="gFxDel">${S.delArm ? '정말 삭제' : '삭제'}</button>`}<button class="btn pri" data-act="gFxSave">저장</button></div>`;
     return h;
   }
+  // 한꺼번에 정하기: 보고 있는 달부터 기본 예산
   function budHtml() {
     const sh = S.sheet, b = sh.draft;
-    let h = band('#111111', '예산 금액') + '<div class="gform">';
+    let h = band('#111111', `${sh.m + 1}월부터 적용할 예산`) + '<div class="gform">';
     catList('exp').forEach((c) => {
-      h += `<div class="ggh" style="margin-top:4px"><b>${esc(c.name)}</b><span id="gbt_${c.id}">${won(sum((c.subs || []).length ? c.subs : [c], (s) => b[s.id] || 0))}</span></div>`;
-      const list = (c.subs || []).length ? c.subs : [c];
-      list.forEach((s) => { h += `<div class="gbin"><span>${esc(s.name)}</span><input data-gb="${s.id}" data-c="${c.id}" inputmode="numeric" value="${b[s.id] ? commas(b[s.id]) : ''}"></div>`; });
+      const subs = c.subs || [];
+      h += `<div class="gbin gbcat"><b>${esc(c.name)}</b><input data-gb="c:${c.id}" data-c="${c.id}" inputmode="numeric" value="${b['c:' + c.id] ? commas(b['c:' + c.id]) : ''}"></div>`;
+      if (subs.length) h += `<div class="gbsum" id="gbt_${c.id}">${budSubTxt(c, b)}</div>`;
+      subs.forEach((x) => { h += `<div class="gbin"><span>${esc(x.name)}</span><input data-gb="${x.id}" data-c="${c.id}" inputmode="numeric" value="${b[x.id] ? commas(b[x.id]) : ''}"></div>`; });
     });
-    h += `<div class="ggh"><b>합계</b><span id="gbt_all">${won(Object.values(b).reduce((s, v) => s + (v || 0), 0))}</span></div>`;
-    return h + `</div><div class="acts"><button class="btn" data-act="close">닫기</button><button class="btn pri" data-act="gBudSave">저장</button></div>`;
+    h += `<div class="ggh"><b>합계</b><span id="gbt_all">${won(budAllTxt(b))}</span></div>`;
+    return h + `</div>${errLine(sh)}<div class="acts"><button class="btn" data-act="close">닫기</button><button class="btn pri" data-act="gBudSave">저장</button></div>`;
+  }
+  const budSubTxt = (c, b) => { const sb = sum(c.subs || [], (x) => b[x.id] || 0), cb = b['c:' + c.id] || 0; return sb ? `소분류 합 ${won(sb)}${cb ? (sb > cb ? ` · ${won(sb - cb)} 넘음` : ` · 그 외 ${won(cb - sb)}`) : ''}` : ''; };
+  const budAllTxt = (b) => sum(catList('exp'), (c) => b['c:' + c.id] || sum(c.subs || [], (x) => b[x.id] || 0));
+  // 한 항목: 기본 예산 + 달마다
+  function budKeyHtml() {
+    const sh = S.sheet, B = sh.B, k = sh.k, y = sh.y;
+    const name = k.startsWith('c:') ? catOf('exp', k.slice(2))?.name : catName('exp', catList('exp').find((c) => (c.subs || []).some((x) => x.id === k))?.id, k);
+    const color = k.startsWith('c:') ? catOf('exp', k.slice(2))?.color : catList('exp').find((c) => (c.subs || []).some((x) => x.id === k))?.color;
+    let h = band(color || '#E6E6E6', name || '');
+    h += `<div class="gform"><div class="gfld"><label class="lb" for="g_base">기본 예산 (${sh.m0 + 1}월부터)</label><div class="gbedit"><input id="g_base" data-gk="base" inputmode="numeric" value="${sh.base ? commas(sh.base) : ''}"><button class="btn sm pri" data-act="gBkBase">저장</button></div></div></div>`;
+    h += `<div class="gyrnav"><button class="ico" aria-label="이전 해" data-act="gBkY" data-v="-1">${IC.l}</button><b>${y}</b><button class="ico" aria-label="다음 해" data-act="gBkY" data-v="1">${IC.r}</button></div>`;
+    const cl = curLabel();
+    for (let m = 11; m >= 0; m--) {
+      const v = budAt(k, y, m, B), o = isOver(k, y, m, B);
+      const cur = cl[0] === y && cl[1] === m;
+      h += `<button class="gbm ${cur ? 'cur' : ''} ${o ? 'ch' : ''}" data-act="gBkMonth" data-v="${m}"><span>${m + 1}월</span><span class="v">${v ? won(v) : '–'}${o ? '<i>따로</i>' : ''}</span></button>`;
+      if (sh.edit === m) h += `<div class="gbedit"><input data-gk="over" inputmode="numeric" value="${sh.ov ? commas(sh.ov) : ''}"><button class="btn sm" data-act="gBkOff">기본으로</button><button class="btn sm pri" data-act="gBkOver">저장</button></div>`;
+    }
+    return h + errLine(sh);
   }
   function accHtml() {
     const sh = S.sheet, a = sh.draft;
@@ -558,7 +617,7 @@ export function setupGb(X) {
   }
   const dayHtml = () => { const d = S.sheet.d; return `${band('#111111', `${fmtMD(d)}${HOLIDAYS[d] ? ' · ' + HOLIDAYS[d] : ''}`)}<div style="margin-top:12px">${dayListG(d)}</div><button class="btn pri" style="width:100%;margin-top:8px" data-act="gNew" data-d="${d}">추가</button>`; };
   const xlsxHtml = () => { const sh = S.sheet; return `${band('#111111', '머니북 엑셀로 내보내기')}<div class="gform"><div class="two">${inp('시작', 'from', sh.from, 'date')}${inp('끝', 'to', sh.to, 'date')}</div></div>${errLine(sh)}<div class="acts"><button class="btn pri" data-act="gXlsxGo">내보내기</button></div>`; };
-  const sheets = { gtx: txHtml, gfx: fxHtml, gbud: budHtml, gacc: accHtml, gcat: catHtml, gpick: pickHtml, gday: dayHtml, gxlsx: xlsxHtml };
+  const sheets = { gtx: txHtml, gfx: fxHtml, gbud: budHtml, gbkey: budKeyHtml, gacc: accHtml, gcat: catHtml, gpick: pickHtml, gday: dayHtml, gxlsx: xlsxHtml };
 
   function refCount(kind, id) {
     if (kind === 'acc') return S.gbTx.filter((t) => t.acc === id || t.to === id).length + S.gbFixed.filter((t) => t.acc === id || t.to === id).length;
@@ -633,8 +692,43 @@ export function setupGb(X) {
       save('gbFixed', d); closeSheet();
     },
     gFxDel: () => { if (!armDel()) return; D.deleteDocIn(U(), 'gbFixed', S.sheet.draft.id); closeSheet(); },
-    gBudEdit: () => { ensureConf(); openSheet({ kind: 'gbud', draft: { ...(conf().budget || {}) } }); },
-    gBudSave: () => { const c = conf(); const b = {}; Object.entries(S.sheet.draft).forEach(([k, v]) => { if (v > 0) b[k] = v; }); saveConf({ ...c, budget: b }); closeSheet(); },
+    gBudEdit: () => {
+      ensureConf();
+      const p = period(S.gbBudOff || 0), B = bv(), d = {};
+      catList('exp').forEach((c) => { d['c:' + c.id] = baseAt(B['c:' + c.id], lab(p.y, p.m)); (c.subs || []).forEach((x) => { d[x.id] = baseAt(B[x.id], lab(p.y, p.m)); }); });
+      openSheet({ kind: 'gbud', y: p.y, m: p.m, draft: d });
+    },
+    gBudSave: () => {
+      const sh = S.sheet, c = conf(), B = clone(bv(c));
+      Object.entries(sh.draft).forEach(([k, v]) => setBase(B, k, sh.y, sh.m, v || 0));
+      const err = budCheck(B, sh.y, sh.m); if (err) { sh.err = err; render(); return; }
+      saveConf({ ...c, budgetV: B }); closeSheet();
+    },
+    gBudKey: (el) => {
+      ensureConf();
+      const p = period(S.gbBudOff || 0), k = el.dataset.k, B = clone(bv());
+      openSheet({ kind: 'gbkey', k, B, y: p.y, m0: p.m, y0: p.y, base: baseAt(B[k], lab(p.y, p.m)), edit: null });
+    },
+    gBkY: (el) => { const sh = S.sheet; sh.y += +el.dataset.v; sh.edit = null; render(); },
+    gBkMonth: (el) => { const sh = S.sheet, m = +el.dataset.v; if (sh.edit === m) { sh.edit = null; render(); return; } sh.edit = m; sh.ov = budAt(sh.k, sh.y, m, sh.B); sh.err = ''; render(); },
+    gBkBase: () => {
+      const sh = S.sheet, c = conf(), B = clone(bv(c));
+      setBase(B, sh.k, sh.y0, sh.m0, sh.base || 0);
+      const err = budCheck(B, sh.y0, sh.m0); if (err) { sh.err = err; render(); return; }
+      sh.B = B; sh.err = ''; saveConf({ ...c, budgetV: B }); toast(`${sh.m0 + 1}월부터 기본 예산을 바꿨어요`); render();
+    },
+    gBkOver: () => {
+      const sh = S.sheet, c = conf(), B = clone(bv(c));
+      setOver(B, sh.k, sh.y, sh.edit, sh.ov || 0);
+      const err = budCheck(B, sh.y, sh.edit); if (err) { sh.err = err; render(); return; }
+      sh.B = B; sh.edit = null; sh.err = ''; saveConf({ ...c, budgetV: B }); render();
+    },
+    gBkOff: () => {
+      const sh = S.sheet, c = conf(), B = clone(bv(c));
+      setOver(B, sh.k, sh.y, sh.edit, null);
+      const err = budCheck(B, sh.y, sh.edit); if (err) { sh.err = err; render(); return; }
+      sh.B = B; sh.edit = null; sh.err = ''; saveConf({ ...c, budgetV: B }); render();
+    },
     gAcc: (el) => { S.gbAcc[el.dataset.v] = !S.gbAcc[el.dataset.v]; render(); },
     gAccNew: () => { ensureConf(); openSheet({ kind: 'gacc', isNew: true, draft: { id: uid(), name: '', type: 'bank', bal: 0 } }); },
     gAccOpen: (el) => { const a = accOf(el.dataset.id); if (!a) return; openSheet({ kind: 'gacc', isNew: false, draft: { ...clone(a), bal: a.type === 'card' ? 0 : balance(a) } }); },
@@ -696,7 +790,7 @@ export function setupGb(X) {
         if (gone.length) {
           S.gbTx.forEach((t) => { if (gone.includes(t.sub)) save('gbTx', { ...t, sub: '' }); });
           S.gbFixed.forEach((t) => { if (gone.includes(t.sub)) save('gbFixed', { ...t, sub: '' }); });
-          gone.forEach((g) => { if (c.budget) delete c.budget[g]; });
+          gone.forEach((g) => { if (c.budget) delete c.budget[g]; if (c.budgetV) delete c.budgetV[g]; });
         }
         list[i] = { ...list[i], name, color: d.color, subs: d.subs };
       } else list.push({ id: d.id, name, color: d.color, subs: d.subs });
@@ -717,6 +811,7 @@ export function setupGb(X) {
       const c = clone(conf());
       c[sh.k] = c[sh.k].filter((x) => x.id !== d.id);
       if (c.budget) { delete c.budget[d.id]; (d.subs || []).forEach((s) => delete c.budget[s.id]); }
+      if (c.budgetV) { delete c.budgetV['c:' + d.id]; (d.subs || []).forEach((s) => delete c.budgetV[s.id]); }
       saveConf(c); closeSheet(); toast('옮기고 지웠어요');
     },
     // 머니북 자료만 담은 백업 파일 (플랜북 설정의 백업 파일에도 함께 들어 있음)
@@ -765,8 +860,14 @@ export function setupGb(X) {
     if (el.dataset.gb) {
       const v = wonOf(el.value); sh.draft[el.dataset.gb] = v;
       const c = catOf('exp', el.dataset.c);
-      const ct = document.getElementById('gbt_' + el.dataset.c); if (ct && c) ct.textContent = won(sum((c.subs || []).length ? c.subs : [c], (s) => sh.draft[s.id] || 0));
-      const all = document.getElementById('gbt_all'); if (all) all.textContent = won(Object.values(sh.draft).reduce((s, x) => s + (x || 0), 0));
+      const ct = document.getElementById('gbt_' + el.dataset.c); if (ct && c) ct.textContent = budSubTxt(c, sh.draft);
+      const all = document.getElementById('gbt_all'); if (all) all.textContent = won(budAllTxt(sh.draft));
+      if (!live) el.value = v ? commas(v) : '';
+      return true;
+    }
+    if (el.dataset.gk) {
+      const v = wonOf(el.value);
+      if (el.dataset.gk === 'base') sh.base = v; else sh.ov = v;
       if (!live) el.value = v ? commas(v) : '';
       return true;
     }

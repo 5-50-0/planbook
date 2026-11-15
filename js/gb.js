@@ -469,7 +469,10 @@ export function setupGb(X) {
   // ---------- 입력 시트 ----------
   const opt = (v, l, cur) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`;
   const sel = (label, f, opts, cur, empty) => `<div class="gfld"><label class="lb" for="g_${f}">${label}</label><select id="g_${f}" data-gf="${f}">${empty ? opt('', empty, cur) : ''}${opts.map(([v, l]) => opt(v, l, cur)).join('')}</select></div>`;
-  const inp = (label, f, val, type = 'text', extra = '') => `<div class="gfld"><label class="lb" for="g_${f}">${label}</label><input id="g_${f}" type="${type}" data-gf="${f}" value="${esc(val ?? '')}" ${extra}></div>`;
+  // 날짜는 기기 설정과 상관없이 yyyy-mm-dd 로 보이게 (누르면 달력은 그대로 열림)
+  const inp = (label, f, val, type = 'text', extra = '') => type === 'date'
+    ? `<div class="gfld"><label class="lb" for="g_${f}">${label}</label><div class="gdate"><input id="g_${f}" type="date" data-gf="${f}" value="${esc(val ?? '')}" ${extra}><span>${esc(val || '')}</span></div></div>`
+    : `<div class="gfld"><label class="lb" for="g_${f}">${label}</label><input id="g_${f}" type="${type}" data-gf="${f}" value="${esc(val ?? '')}" ${extra}></div>`;
   const accOpts = (types) => accs().filter((a) => types.includes(a.type)).map((a) => [a.id, a.name]);
   const amtBand = (color, d) => `<div class="band in gband" style="background:${color};color:${textOn(color)}"><input id="g_title" data-gf="title" value="${esc(d.title || '')}" autocomplete="off" style="color:inherit"><input id="g_amount" data-gf="amount" inputmode="numeric" autocomplete="off" value="${d.amount ? commas(d.amount) : ''}" style="color:inherit"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div>`;
   function catSel(kind, d) {
@@ -901,6 +904,7 @@ export function setupGb(X) {
     const f = el.dataset.gf;
     if (!f) return false;
     const d = sh.draft || sh;
+    if (el.type === 'date' && el.parentElement?.classList.contains('gdate')) { const sp = el.nextElementSibling; if (sp) sp.textContent = el.value; }
     if (f === 'amount' || f === 'bal' || f === 'fee') { d[f] = wonOf(el.value); if (!live) { el.value = d[f] ? commas(d[f]) : ''; if (sh.kind === 'gtx' && d.inst > 1) render(); } return true; }
     if (f === 'from' || f === 'to') { if (sh.kind === 'gxlsx') { sh[f] = el.value; return true; } }
     if (f === 'moveTo') { sh.moveTo = el.value; return true; }

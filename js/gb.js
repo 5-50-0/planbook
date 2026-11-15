@@ -52,7 +52,10 @@ export function setupGb(X) {
   const catOf = (kind, id) => catList(kind).find((c) => c.id === id);
   const subOf = (kind, cid, sid) => (catOf(kind, cid)?.subs || []).find((s) => s.id === sid);
   const catName = (kind, cid, sid) => { const c = catOf(kind, cid); if (!c) return '분류 없음'; const s = sid && (c.subs || []).find((x) => x.id === sid); return s ? `${c.name} › ${s.name}` : c.name; };
-  const colorOfE = (e) => (e.type === 'tr' ? '#D9D9D9' : catOf(e.type, e.cat)?.color || '#CFCFCF');
+  // 이체: 수수료는 금액에 더하고, '지출로 잡기'면 지출로 셈
+  const isE = (e) => e.type === 'exp' || (e.type === 'tr' && !!e.asExp);
+  const amtE = (e) => (e.type === 'tr' ? (e.amount || 0) + (+e.fee || 0) : e.amount || 0);
+  const colorOfE = (e) => (e.type === 'tr' ? (e.asExp ? catOf('exp', e.cat)?.color || '#D9D9D9' : '#D9D9D9') : catOf(e.type, e.cat)?.color || '#CFCFCF');
   const accName = (id) => accOf(id)?.name || '통장 없음';
   const ACC_COL = { bank: '#111111', saving: '#8A8A8A', card: '#C0392B' };
   const accColor = (a) => a.color || ACC_COL[a.type] || '#111111';
@@ -115,7 +118,7 @@ export function setupGb(X) {
   const sortE = (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (b.created || 0) - (a.created || 0));
   const sum = (list, f) => list.reduce((s, e) => s + (f ? f(e) : e.amount || 0), 0);
   const incOf = (l) => sum(l.filter((e) => e.type === 'inc'));
-  const expOf = (l) => sum(l.filter((e) => e.type === 'exp'));
+  const expOf = (l) => sum(l.filter(isE), amtE);
 
   // ---------- 잔액 ----------
   function balance(a, upto = todayStr()) {
@@ -126,7 +129,7 @@ export function setupGb(X) {
     l.forEach((e) => {
       if (e.type === 'inc' && e.acc === a.id) b += e.amount;
       if (e.type === 'exp' && e.acc === a.id) b -= e.amount;
-      if (e.type === 'tr') { if (e.acc === a.id) b -= e.amount; if (e.to === a.id) b += e.amount; }
+      if (e.type === 'tr') { if (e.acc === a.id) b -= amtE(e); if (e.to === a.id) b += e.amount; }
     });
     return b;
   }
@@ -153,11 +156,11 @@ export function setupGb(X) {
   const headMonth = (y, m, t) => `<div class="head"><div class="big"><h1>${m + 1}</h1><div class="sub"><p class="y">${y}</p><p class="m">${EN_MONTH[m]}</p></div></div>${t}</div>`;
   const headWord = (w, sub, t) => `<div class="head"><div class="big"><h1 class="word">${w}</h1>${sub || ''}</div>${t}</div>`;
   const txRow = (e) => {
-    const sub = e.type === 'tr' ? `${esc(accName(e.acc))} → ${esc(accName(e.to))}` : `${esc(catName(e.type, e.cat, e.sub))} · ${esc(accName(e.acc))}`;
-    const extra = e.n ? `${e.n}개월 할부 ${e.k}회 · 전체 ${won(e.total)}` : e.fixed ? '고정' : '';
-    const amt = e.type === 'inc' ? `<span class="gin">+${won(e.amount)}</span>` : e.type === 'exp' ? `-${won(e.amount)}` : won(e.amount);
+    const sub = e.type === 'tr' ? `${e.asExp ? esc(catName('exp', e.cat, e.sub)) + ' · ' : ''}${esc(accName(e.acc))} → ${esc(accName(e.to))}` : `${esc(catName(e.type, e.cat, e.sub))} · ${esc(accName(e.acc))}`;
+    const extra = [e.n ? `${e.n}개월 할부 ${e.k}회 · 전체 ${won(e.total)}` : '', e.type === 'tr' && +e.fee ? `수수료 ${won(e.fee)} 포함` : '', e.fixed ? '고정' : ''].filter(Boolean).join(' · ');
+    const amt = e.type === 'inc' ? `<span class="gin">+${won(e.amount)}</span>` : isE(e) ? `-${won(amtE(e))}` : won(amtE(e));
     const act = e.src === 'fx' ? `data-act="gFxOpen" data-id="${e.id}"` : `data-act="gTxOpen" data-id="${e.id}"`;
-    return `<button class="gtx ${e.date > todayStr() ? 'fut' : ''}" ${act}><span class="sw" style="background:${colorOfE(e)}"></span><span class="t">${esc(e.title || (e.type === 'tr' ? '이체' : catName(e.type, e.cat, e.sub)))}<small>${sub}</small></span><span class="a ${e.type === 'tr' ? 'tr' : ''}">${amt}${extra ? `<small>${extra}</small>` : ''}</span></button>`;
+    return `<button class="gtx ${e.date > todayStr() ? 'fut' : ''}" ${act}><span class="sw" style="background:${colorOfE(e)}"></span><span class="t">${esc(e.title || (e.type === 'tr' ? '이체' : catName(e.type, e.cat, e.sub)))}<small>${sub}</small></span><span class="a ${e.type === 'tr' && !e.asExp ? 'tr' : ''}">${amt}${extra ? `<small>${extra}</small>` : ''}</span></button>`;
   };
   const dayTotal = (l) => { const v = incOf(l) - expOf(l); return v ? `<span class="${v < 0 ? 'gout' : 'gin'}">${sgn(v)}</span>` : ''; };
   const dayListG = (d) => { const l = entries(d, d).sort(sortE); return l.length ? l.map(txRow).join('') : '<p class="empty">내역 없음</p>'; };
@@ -251,12 +254,12 @@ export function setupGb(X) {
     let h = headWord('버짓북', sub, tools('gBPrev', 'gBNext')) + tabs([['bud', '예산'], ['fix', '고정 지출 · 이체']], S.gbBudTab, 'gBudTab');
     if (S.gbBudTab === 'fix') return h + fixList();
     const upto = t < p.end ? t : p.end;
-    const l = p.start <= t ? entries(p.start, upto).filter((e) => e.type === 'exp') : [];
+    const l = p.start <= t ? entries(p.start, upto).filter(isE) : [];
     const left = t > p.end ? 0 : t < p.start ? Math.round((parse(p.end) - parse(p.start)) / 864e5) + 1 : Math.round((parse(p.end) - parse(t)) / 864e5) + 1;
     const B = bv(), Y = p.y, M = p.m;
-    const fixedKeys = new Set(S.gbFixed.filter((f) => f.type === 'exp' && (!f.end || f.end >= p.start)).map((f) => f.sub || 'c:' + f.cat));
+    const fixedKeys = new Set(S.gbFixed.filter((f) => isE(f) && (!f.end || f.end >= p.start)).map((f) => f.sub || 'c:' + f.cat));
     const usedSub = new Map(), usedCat = new Map();
-    l.forEach((e) => { if (e.sub) usedSub.set(e.sub, (usedSub.get(e.sub) || 0) + e.amount); usedCat.set(e.cat, (usedCat.get(e.cat) || 0) + e.amount); });
+    l.forEach((e) => { const v = amtE(e); if (e.sub) usedSub.set(e.sub, (usedSub.get(e.sub) || 0) + v); usedCat.set(e.cat, (usedCat.get(e.cat) || 0) + v); });
     const rowH = (key, n, b, u, fixed) => {
       const pct = b ? Math.round((u / b) * 100) : 0;
       const right = !b ? '예산 없음' : fixed ? '고정' : u > b ? `초과 ${won(u - b)}` : left ? `하루 ${won(Math.floor((b - u) / left / 100) * 100)}` : `남음 ${won(b - u)}`;
@@ -289,13 +292,13 @@ export function setupGb(X) {
     const t = todayStr();
     const act = S.gbFixed.filter((f) => !f.end || f.end >= t), ended = S.gbFixed.filter((f) => f.end && f.end < t);
     const row = (f) => {
-      const s = f.type === 'tr' ? `매월 ${f.day}일 · ${esc(accName(f.acc))} → ${esc(accName(f.to))}` : `매월 ${f.day}일 · ${esc(catName('exp', f.cat, f.sub))} · ${esc(accName(f.acc))}`;
-      return `<button class="gtx" data-act="gFxOpen" data-id="${f.id}"><span class="sw" style="background:${f.type === 'tr' ? '#8A8A8A' : colorOfE(f)}"></span><span class="t">${esc(f.title || '')}<small>${s}</small></span><span class="a">${won(f.amount)}<small>${f.start.slice(0, 7).replace('-', '.')} – ${f.end ? f.end.slice(0, 7).replace('-', '.') : ''}</small></span></button>`;
+      const s = f.type === 'tr' ? `매월 ${f.day}일 · ${f.asExp ? esc(catName('exp', f.cat, f.sub)) + ' · ' : ''}${esc(accName(f.acc))} → ${esc(accName(f.to))}` : `매월 ${f.day}일 · ${esc(catName('exp', f.cat, f.sub))} · ${esc(accName(f.acc))}`;
+      return `<button class="gtx" data-act="gFxOpen" data-id="${f.id}"><span class="sw" style="background:${f.type === 'tr' && !f.asExp ? '#8A8A8A' : colorOfE(f)}"></span><span class="t">${esc(f.title || '')}<small>${s}</small></span><span class="a">${won(amtE(f))}<small>${f.start.slice(0, 7).replace('-', '.')} – ${f.end ? f.end.slice(0, 7).replace('-', '.') : ''}</small></span></button>`;
     };
     const ex = act.filter((f) => f.type === 'exp'), tr = act.filter((f) => f.type === 'tr');
     let h = '<div class="gpad gbot">';
-    h += `<div class="ggh"><b>고정 지출</b><span>매달 ${won(sum(ex))}</span></div>${ex.map(row).join('') || '<p class="empty" style="padding:10px 2px">없음</p>'}`;
-    h += `<div class="ggh"><b>고정 이체</b><span>매달 ${won(sum(tr))}</span></div>${tr.map(row).join('') || '<p class="empty" style="padding:10px 2px">없음</p>'}`;
+    h += `<div class="ggh"><b>고정 지출</b><span>매달 ${won(sum(ex, amtE))}</span></div>${ex.map(row).join('') || '<p class="empty" style="padding:10px 2px">없음</p>'}`;
+    h += `<div class="ggh"><b>고정 이체</b><span>매달 ${won(sum(tr, amtE))}</span></div>${tr.map(row).join('') || '<p class="empty" style="padding:10px 2px">없음</p>'}`;
     if (ended.length) h += `<div class="ggh"><b>끝난 항목</b><span></span></div>${ended.map(row).join('')}`;
     return h + `<button class="btn sm" style="margin-top:14px" data-act="gFxNew">${small(IC.plus, 16)} 고정 항목 추가</button></div>`;
   }
@@ -344,8 +347,8 @@ export function setupGb(X) {
     }
     rows.push({ g: '지출' });
     catList('exp').forEach((c) => {
-      rows.push({ key: 'exp:' + c.id, name: c.name, vals: months.map((l) => sum(l.filter((e) => e.type === 'exp' && e.cat === c.id))), cat: c.id, hasSub: (c.subs || []).length > 0 });
-      (c.subs || []).forEach((s) => rows.push({ key: 'sub:' + s.id, parent: c.id, name: s.name, vals: months.map((l) => sum(l.filter((e) => e.type === 'exp' && e.sub === s.id))) }));
+      rows.push({ key: 'exp:' + c.id, name: c.name, vals: months.map((l) => sum(l.filter((e) => isE(e) && e.cat === c.id), amtE)), cat: c.id, hasSub: (c.subs || []).length > 0 });
+      (c.subs || []).forEach((s) => rows.push({ key: 'sub:' + s.id, parent: c.id, name: s.name, vals: months.map((l) => sum(l.filter((e) => isE(e) && e.sub === s.id), amtE)) }));
     });
     return rows;
   }
@@ -357,9 +360,9 @@ export function setupGb(X) {
       const l = monthAgg(yy, m);
       const PQ = periodOf(yy, m);
       h = `<div class="head"><div class="big"><h1>${m + 1}</h1><div class="sub"><p class="y">${yy}</p><p class="m">${md(PQ.start)} – ${md(PQ.end)}</p></div></div>${tools('gMPrev', 'gMNext')}</div>` + tabs([['mon', '월별'], ['year', '연간']], 'mon', 'gStatTab') + sumBar(incOf(l), expOf(l));
-      const ex = l.filter((e) => e.type === 'exp'), tot = sum(ex) || 1;
-      const prev = monthAgg(m === 0 ? yy - 1 : yy, m === 0 ? 11 : m - 1).filter((e) => e.type === 'exp');
-      const rows = catList('exp').map((c) => ({ c, v: sum(ex.filter((e) => e.cat === c.id)), pv: sum(prev.filter((e) => e.cat === c.id)) })).filter((r) => r.v || r.pv).sort((a, b) => b.v - a.v);
+      const ex = l.filter(isE), tot = sum(ex, amtE) || 1;
+      const prev = monthAgg(m === 0 ? yy - 1 : yy, m === 0 ? 11 : m - 1).filter(isE);
+      const rows = catList('exp').map((c) => ({ c, v: sum(ex.filter((e) => e.cat === c.id), amtE), pv: sum(prev.filter((e) => e.cat === c.id), amtE) })).filter((r) => r.v || r.pv).sort((a, b) => b.v - a.v);
       const max = Math.max(1, ...rows.map((r) => r.v));
       h += `<div class="gpad gbot"><div class="ggh"><b>분류별 지출</b><span>전월 대비</span></div>`;
       h += rows.map((r) => { const d = r.pv ? Math.round(((r.v - r.pv) / r.pv) * 100) : null; return `<div class="gcr"><span>${esc(r.c.name)}</span><span class="b"><i style="width:${(r.v / max) * 100}%;background:${r.c.color}"></i></span><span class="v">${won(r.v)}</span><span class="c ${d > 0 ? 'gout' : d < 0 ? 'gin' : ''}">${d === null ? '' : (d > 0 ? '+' : '') + d + '%'}</span></div>`; }).join('') || '<p class="empty" style="padding:10px 2px">없음</p>';
@@ -498,14 +501,18 @@ export function setupGb(X) {
     if (!q.trim()) return `<div class="gsugc">${l.map((t, i) => `<button data-act="gSug" data-i="${i}">${esc(t.title)}</button>`).join('')}</div>`;
     return `<div class="gsugl">${l.map((t, i) => `<button data-act="gSug" data-i="${i}"><span>${esc(t.title)}<small>${t.type === 'tr' ? `${esc(accName(t.acc))} → ${esc(accName(t.to))}` : `${esc(catName(t.type, t.cat, t.sub))} · ${esc(accName(t.acc))}`}</small></span><b>${won(t.amount)}</b></button>`).join('')}</div>`;
   }
+  const feeInp = (d) => `<div class="gfld"><label class="lb" for="g_fee">수수료</label><input id="g_fee" data-gf="fee" inputmode="numeric" autocomplete="off" value="${+d.fee ? commas(d.fee) : ''}"></div>`;
+  const ynHtml = (d) => `<div class="gfld gyn"><span>지출로 잡기</span>${seg([['n', '아니요'], ['y', '예']], d.asExp ? 'y' : 'n', 'gAsExp')}</div>`;
   function txHtml() {
     const sh = S.sheet, d = sh.draft;
-    const color = d.type === 'tr' ? '#D9D9D9' : catOf(d.type, d.cat)?.color || '#E6E6E6';
+    const color = d.type === 'tr' ? (d.asExp && catOf('exp', d.cat)?.color) || '#D9D9D9' : catOf(d.type, d.cat)?.color || '#E6E6E6';
     let h = amtBand(color, d) + `<div id="gsug">${sugHtml(sh)}</div>`;
     h += `<div class="gform">${seg([['exp', '지출'], ['inc', '수입'], ['tr', '이체']], d.type, 'gTxType')}`;
     if (d.type === 'tr') {
-      h += inp('날짜', 'date', d.date, 'date');
       h += `<div class="two">${sel('보내는 통장', 'acc', accOpts(['bank', 'saving']), d.acc, '고르기')}${sel('받는 통장', 'to', accOpts(['bank', 'saving']), d.to, '고르기')}</div>`;
+      h += catSel('exp', d);
+      h += `<div class="two">${inp('날짜', 'date', d.date, 'date')}${feeInp(d)}</div>`;
+      h += ynHtml(d);
     } else {
       const ao = d.type === 'exp' ? accOpts(['bank', 'saving', 'card']) : accOpts(['bank', 'saving']);
       h += `<div class="two">${inp('날짜', 'date', d.date, 'date')}${sel(d.type === 'exp' ? '결제 방법' : '입금 통장', 'acc', ao, d.acc, '고르기')}</div>`;
@@ -522,30 +529,42 @@ export function setupGb(X) {
   }
   function fxHtml() {
     const sh = S.sheet, d = sh.draft;
-    const color = d.type === 'tr' ? '#D9D9D9' : catOf('exp', d.cat)?.color || '#E6E6E6';
+    const color = d.type === 'tr' ? (d.asExp && catOf('exp', d.cat)?.color) || '#D9D9D9' : catOf('exp', d.cat)?.color || '#E6E6E6';
     let h = amtBand(color, d) + `<div class="gform">${seg([['exp', '고정 지출'], ['tr', '고정 이체']], d.type, 'gFxType')}`;
+    const daySel = sel('반복', 'day', Array.from({ length: 31 }, (_, i) => [String(i + 1), `매월 ${i + 1}일`]), String(d.day));
+    // 왼쪽 줄: 보내는 통장(결제 방법) - 대분류 - 반복 - 시작일 - 지출로 잡기
     if (d.type === 'tr') h += `<div class="two">${sel('보내는 통장', 'acc', accOpts(['bank', 'saving']), d.acc, '고르기')}${sel('받는 통장', 'to', accOpts(['bank', 'saving']), d.to, '고르기')}</div>`;
-    else { h += `<div class="two">${sel('결제 방법', 'acc', accOpts(['bank', 'saving', 'card']), d.acc, '고르기')}<div></div></div>`; h += catSel('exp', d); }
-    h += sel('반복', 'day', Array.from({ length: 31 }, (_, i) => [String(i + 1), `매월 ${i + 1}일`]), String(d.day));
+    else h += `<div class="two">${sel('결제 방법', 'acc', accOpts(['bank', 'saving', 'card']), d.acc, '고르기')}<div></div></div>`;
+    h += catSel('exp', d);
+    h += `<div class="two">${daySel}${d.type === 'tr' ? feeInp(d) : '<div></div>'}</div>`;
     h += `<div class="two">${inp('시작일', 'start', d.start, 'date')}${inp('종료일', 'end', d.end, 'date')}</div>`;
+    if (d.type === 'tr') h += ynHtml(d);
     h += inp('메모', 'memo', d.memo);
     h += '</div>' + errLine(sh) + `<div class="acts">${sh.isNew ? '<button class="btn" data-act="close">닫기</button>' : `<button class="btn del" data-act="gFxDel">${S.delArm ? '정말 삭제' : '삭제'}</button>`}<button class="btn pri" data-act="gFxSave">저장</button></div>`;
     return h;
   }
-  // 한꺼번에 정하기: 보고 있는 달부터 기본 예산
-  function budHtml() {
-    const sh = S.sheet, b = sh.draft;
-    let h = band('#111111', `${sh.m + 1}월부터 적용할 예산`) + '<div class="gform">';
-    catList('exp').forEach((c) => {
-      const subs = c.subs || [];
-      h += `<div class="gbin gbcat"><b>${esc(c.name)}</b><input data-gb="c:${c.id}" data-c="${c.id}" inputmode="numeric" value="${b['c:' + c.id] ? commas(b['c:' + c.id]) : ''}"></div>`;
-      if (subs.length) h += `<div class="gbsum" id="gbt_${c.id}">${budSubTxt(c, b)}</div>`;
-      subs.forEach((x) => { h += `<div class="gbin"><span>${esc(x.name)}</span><input data-gb="${x.id}" data-c="${c.id}" inputmode="numeric" value="${b[x.id] ? commas(b[x.id]) : ''}"></div>`; });
-    });
-    h += `<div class="ggh"><b>합계</b><span id="gbt_all">${won(budAllTxt(b))}</span></div>`;
-    return h + `</div>${errLine(sh)}<div class="acts"><button class="btn" data-act="close">닫기</button><button class="btn pri" data-act="gBudSave">저장</button></div>`;
+  function budFill(sh) {
+    const B = bv(), L = lab(sh.y, sh.m), d = {};
+    catList('exp').forEach((c) => [{ id: 'c:' + c.id }, ...(c.subs || [])].forEach((x) => { d[x.id] = sh.mode === 'cont' ? baseAt(B[x.id], L) : budAt(x.id, sh.y, sh.m, B); }));
+    sh.draft = d;
   }
-  const budSubTxt = (c, b) => { const sb = sum(c.subs || [], (x) => b[x.id] || 0), cb = b['c:' + c.id] || 0; return sb ? `소분류 합 ${won(sb)}${cb ? (sb > cb ? ` · ${won(sb - cb)} 넘음` : ` · 그 외 ${won(cb - sb)}`) : ''}` : ''; };
+  // 예산 정하기 (표): 분류 | 지난달 | 이번 달. 빈칸은 예산 없음
+  function budHtml() {
+    const sh = S.sheet, b = sh.draft, B = bv();
+    const py = sh.m === 0 ? sh.y - 1 : sh.y, pm = sh.m === 0 ? 11 : sh.m - 1;
+    let h = band('#111111', `${sh.m + 1}월 예산`);
+    h += `<div class="gtabs gbtab">${[['cont', `${sh.m + 1}월부터 계속`], ['only', `${sh.m + 1}월만`]].map(([k, l]) => `<button class="${sh.mode === k ? 'on' : ''}" data-act="gBudMode" data-v="${k}">${l}</button>`).join('')}</div>`;
+    h += `<table class="gct"><thead><tr><th>분류</th><th>지난달</th><th>${sh.m + 1}월</th></tr></thead><tbody>`;
+    const cell = (k, c) => { const v = b[k]; const ov = sh.mode === 'only' && isOver(k, sh.y, sh.m, B); return `<td class="v"><input id="gb_${k.replace(':', '_')}" data-gb="${k}" data-c="${c}" inputmode="numeric" autocomplete="off" class="${ov ? 'ov' : ''}" value="${v ? commas(v) : ''}"></td>`; };
+    catList('exp').forEach((c) => {
+      const pv = budAt('c:' + c.id, py, pm, B);
+      h += `<tr class="c"><td><span class="sw" style="background:${c.color}"></span>${esc(c.name)}</td><td class="p">${pv ? won(pv) : ''}</td>${cell('c:' + c.id, c.id)}</tr>`;
+      (c.subs || []).forEach((x) => { const sv = budAt(x.id, py, pm, B); h += `<tr class="s"><td>${esc(x.name)}</td><td class="p">${sv ? won(sv) : ''}</td>${cell(x.id, c.id)}</tr>`; });
+    });
+    h += '</tbody></table>';
+    return h + `${errLine(sh)}<div class="gbft"><div><small>합계</small><b id="gbt_all">${won(budAllTxt(b))}</b></div><button class="btn pri" data-act="gBudSave">저장</button></div>`;
+  }
+  const budSubTxt = () => '';
   const budAllTxt = (b) => sum(catList('exp'), (c) => b['c:' + c.id] || sum(c.subs || [], (x) => b[x.id] || 0));
   // 한 항목: 기본 예산 + 달마다
   function budKeyHtml() {
@@ -660,6 +679,7 @@ export function setupGb(X) {
       sh.sugOff = true;
       render();
     },
+    gAsExp: (el) => { S.sheet.draft.asExp = el.dataset.v === 'y'; render(); },
     gInst: (el) => { const sh = S.sheet; if (el.dataset.v === 'c') { sh.instCustom = true; } else { sh.instCustom = false; sh.draft.inst = +el.dataset.v; } render(); },
     gTxSave: () => {
       const sh = S.sheet, d = { ...sh.draft };
@@ -668,8 +688,9 @@ export function setupGb(X) {
       if (!d.date) { sh.err = '날짜를 골라 주세요.'; render(); return; }
       if (!d.acc) { sh.err = d.type === 'tr' ? '보내는 통장을 골라 주세요.' : '통장이나 카드를 골라 주세요.'; render(); return; }
       if (d.type === 'tr' && (!d.to || d.to === d.acc)) { sh.err = '받는 통장을 골라 주세요.'; render(); return; }
-      if (d.type !== 'tr' && !d.cat) { sh.err = '대분류를 골라 주세요.'; render(); return; }
+      if ((d.type !== 'tr' || d.asExp) && !d.cat) { sh.err = '대분류를 골라 주세요.'; render(); return; }
       if (d.type !== 'exp' || accOf(d.acc)?.type !== 'card') d.inst = 1;
+      if (d.type !== 'tr') { delete d.fee; delete d.asExp; } else { d.fee = +d.fee || 0; d.asExp = !!d.asExp; }
       d.inst = Math.max(1, Math.min(60, +d.inst || 1));
       if (d.type !== 'tr') d.to = '';
       save('gbTx', d); closeSheet();
@@ -685,30 +706,35 @@ export function setupGb(X) {
       if (!d.amount) { sh.err = '금액을 입력해 주세요.'; render(); return; }
       if (!d.acc) { sh.err = '통장을 골라 주세요.'; render(); return; }
       if (d.type === 'tr' && (!d.to || d.to === d.acc)) { sh.err = '받는 통장을 골라 주세요.'; render(); return; }
-      if (d.type === 'exp' && !d.cat) { sh.err = '대분류를 골라 주세요.'; render(); return; }
+      if ((d.type === 'exp' || d.asExp) && !d.cat) { sh.err = '대분류를 골라 주세요.'; render(); return; }
+      if (d.type !== 'tr') { delete d.fee; delete d.asExp; } else { d.fee = +d.fee || 0; d.asExp = !!d.asExp; }
       if (!d.start) { sh.err = '시작일을 골라 주세요.'; render(); return; }
       if (d.end && d.end < d.start) { sh.err = '종료일이 시작일보다 빨라요.'; render(); return; }
       d.day = +d.day || 1;
       save('gbFixed', d); closeSheet();
     },
     gFxDel: () => { if (!armDel()) return; D.deleteDocIn(U(), 'gbFixed', S.sheet.draft.id); closeSheet(); },
-    gBudEdit: () => {
+    gBudEdit: (el) => {
       ensureConf();
-      const p = period(S.gbBudOff || 0), B = bv(), d = {};
-      catList('exp').forEach((c) => { d['c:' + c.id] = baseAt(B['c:' + c.id], lab(p.y, p.m)); (c.subs || []).forEach((x) => { d[x.id] = baseAt(B[x.id], lab(p.y, p.m)); }); });
-      openSheet({ kind: 'gbud', y: p.y, m: p.m, draft: d });
+      const p = period(S.gbBudOff || 0);
+      const sh = { kind: 'gbud', y: p.y, m: p.m, mode: 'cont', draft: {} };
+      budFill(sh);
+      openSheet(sh);
+      const k = el?.dataset?.k; if (k) setTimeout(() => { const inp2 = document.getElementById('gb_' + k.replace(':', '_')); if (inp2) { inp2.scrollIntoView({ block: 'center' }); inp2.focus(); } }, 50);
     },
+    gBudMode: (el) => { const sh = S.sheet; sh.mode = el.dataset.v; sh.err = ''; budFill(sh); render(); },
     gBudSave: () => {
       const sh = S.sheet, c = conf(), B = clone(bv(c));
-      Object.entries(sh.draft).forEach(([k, v]) => setBase(B, k, sh.y, sh.m, v || 0));
+      Object.entries(sh.draft).forEach(([k, v]) => {
+        v = v || 0;
+        if (sh.mode === 'cont') setBase(B, k, sh.y, sh.m, v);
+        else if (v === baseAt(B[k], lab(sh.y, sh.m))) setOver(B, k, sh.y, sh.m, null);
+        else setOver(B, k, sh.y, sh.m, v);
+      });
       const err = budCheck(B, sh.y, sh.m); if (err) { sh.err = err; render(); return; }
       saveConf({ ...c, budgetV: B }); closeSheet();
     },
-    gBudKey: (el) => {
-      ensureConf();
-      const p = period(S.gbBudOff || 0), k = el.dataset.k, B = clone(bv());
-      openSheet({ kind: 'gbkey', k, B, y: p.y, m0: p.m, y0: p.y, base: baseAt(B[k], lab(p.y, p.m)), edit: null });
-    },
+    gBudKey: (el) => ACT.gBudEdit(el),
     gBkY: (el) => { const sh = S.sheet; sh.y += +el.dataset.v; sh.edit = null; render(); },
     gBkMonth: (el) => { const sh = S.sheet, m = +el.dataset.v; if (sh.edit === m) { sh.edit = null; render(); return; } sh.edit = m; sh.ov = budAt(sh.k, sh.y, m, sh.B); sh.err = ''; render(); },
     gBkBase: () => {
@@ -829,9 +855,9 @@ export function setupGb(X) {
       const T = { exp: '지출', inc: '수입', tr: '이체' };
       const l = entries(sh.from, sh.to).sort((a, b) => (a.date < b.date ? -1 : 1));
       const rows = l.map((e) => {
-        const c = e.type === 'tr' ? null : catOf(e.type, e.cat);
+        const c = e.type === 'tr' && !e.asExp ? null : catOf(e.type === 'tr' ? 'exp' : e.type, e.cat);
         const s = c && e.sub ? (c.subs || []).find((x) => x.id === e.sub) : null;
-        return [e.date, T[e.type], e.amount, c?.name || '', s?.name || '', e.title || '', accName(e.acc), e.type === 'tr' ? accName(e.to) : '', e.n ? `${e.k}/${e.n}` : e.fixed ? '고정' : '', e.memo || ''];
+        return [e.date, e.type === 'tr' && e.asExp ? '이체(지출)' : T[e.type], amtE(e), c?.name || '', s?.name || '', e.title || '', accName(e.acc), e.type === 'tr' ? accName(e.to) : '', e.n ? `${e.k}/${e.n}` : e.fixed ? '고정' : '', e.memo || ''];
       });
       const y = +sh.from.slice(0, 4);
       const yr = yearRows(y).filter((r) => r.key).map((r) => [r.parent ? '  ' + r.name : r.name, ...r.vals, r.vals.reduce((s, v) => s + v, 0)]);
@@ -875,7 +901,7 @@ export function setupGb(X) {
     const f = el.dataset.gf;
     if (!f) return false;
     const d = sh.draft || sh;
-    if (f === 'amount' || f === 'bal') { d[f] = wonOf(el.value); if (!live) { el.value = d[f] ? commas(d[f]) : ''; if (sh.kind === 'gtx' && d.inst > 1) render(); } return true; }
+    if (f === 'amount' || f === 'bal' || f === 'fee') { d[f] = wonOf(el.value); if (!live) { el.value = d[f] ? commas(d[f]) : ''; if (sh.kind === 'gtx' && d.inst > 1) render(); } return true; }
     if (f === 'from' || f === 'to') { if (sh.kind === 'gxlsx') { sh[f] = el.value; return true; } }
     if (f === 'moveTo') { sh.moveTo = el.value; return true; }
     if (f === 'pick' || f === 'hex') {

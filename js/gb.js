@@ -147,7 +147,7 @@ export function setupGb(X) {
   const tools = (prev, next, extra = '') => {
     const W = wide();
     const nav = prev ? `<button class="ico ${W ? 'bd' : ''}" aria-label="이전" data-act="${prev}">${IC.l}</button><button class="ico ${W ? 'bd' : ''}" aria-label="다음" data-act="${next}">${IC.r}</button>` : '';
-    const ph = W ? '' : `<button class="ico ${S.syncing ? 'spin' : ''}" aria-label="동기화" data-act="sync">${IC.sync}</button><button class="ico" aria-label="가계부 설정" data-act="gView" data-v="set">${small(gIc('set').replace('class="ni"', ''), 20)}</button>`;
+    const ph = W ? '' : `<button class="ico ${S.syncing ? 'spin' : ''}" aria-label="동기화" data-act="sync">${IC.sync}</button><button class="ico" aria-label="머니북 설정" data-act="gView" data-v="set">${small(gIc('set').replace('class="ni"', ''), 20)}</button>`;
     return `<div class="tools">${extra}${nav}${ph}</div>`;
   };
   const headMonth = (y, m, t) => `<div class="head"><div class="big"><h1>${m + 1}</h1><div class="sub"><p class="y">${y}</p><p class="m">${EN_MONTH[m]}</p></div></div>${t}</div>`;
@@ -218,7 +218,7 @@ export function setupGb(X) {
     const p = period(S.gbBudOff || 0);
     const t = todayStr();
     const sub = `<div class="sub"><p class="y">${md(p.start)} – ${md(p.end)}</p><p class="m">${p.m + 1}월</p></div>`;
-    let h = headWord('예산', sub, tools('gBPrev', 'gBNext')) + tabs([['bud', '예산'], ['fix', '고정 지출 · 이체']], S.gbBudTab, 'gBudTab');
+    let h = headWord('버짓북', sub, tools('gBPrev', 'gBNext')) + tabs([['bud', '예산'], ['fix', '고정 지출 · 이체']], S.gbBudTab, 'gBudTab');
     if (S.gbBudTab === 'fix') return h + fixList();
     const upto = t < p.end ? t : p.end;
     const l = p.start <= t ? entries(p.start, upto).filter((e) => e.type === 'exp') : [];
@@ -269,7 +269,7 @@ export function setupGb(X) {
     const bs = sum(bank, balance), ss = sum(sav, balance), cs = sum(card, balance);
     const net = bs + ss + cs;
     const tot = Math.abs(bs) + Math.abs(ss) + Math.abs(cs) || 1;
-    let h = headWord('자산', '', tools('', '', `<button class="ico ${wide() ? 'bd' : ''}" aria-label="통장 추가" data-act="gAccNew">${IC.plus}</button>`));
+    let h = headWord('에셋북', '', tools('', '', `<button class="ico ${wide() ? 'bd' : ''}" aria-label="통장 추가" data-act="gAccNew">${IC.plus}</button>`));
     h += `<div class="gpad gbot"><div class="gnet"><small>순자산</small><b>${won(net)}</b></div>`;
     h += `<div class="gstk"><i style="flex:${Math.abs(bs) / tot};background:#111"></i><i style="flex:${Math.abs(ss) / tot};background:#8A8A8A"></i><i style="flex:${Math.abs(cs) / tot};background:#C0392B"></i></div>`;
     h += '<div class="glg"><span><i style="background:#111"></i>통장</span><span><i style="background:#8A8A8A"></i>저축</span><span><i style="background:#C0392B"></i>신용카드</span></div>';
@@ -329,7 +329,7 @@ export function setupGb(X) {
       return h + `<p class="mut" style="font-size:12px;margin-top:8px">${tot ? '' : ''}</p></div>`;
     }
     const xl = wide() ? `<button class="btn sm" style="margin-right:8px" data-act="gXlsx">엑셀로 내보내기</button>` : '';
-    h = headWord('통계', `<div class="sub"><p class="y">&nbsp;</p><p class="m">${y}</p></div>`, tools('gYPrev', 'gYNext', xl)) + tabs([['mon', '월별'], ['year', '연간']], 'year', 'gStatTab');
+    h = headWord('리포트', `<div class="sub"><p class="y">&nbsp;</p><p class="m">${y}</p></div>`, tools('gYPrev', 'gYNext', xl)) + tabs([['mon', '월별'], ['year', '연간']], 'year', 'gStatTab');
     const rows = yearRows(y);
     const cm = new Date().getFullYear() === y ? new Date().getMonth() : -1;
     if (wide()) {
@@ -357,7 +357,7 @@ export function setupGb(X) {
   // ---------- 가계부 설정 ----------
   function setPage() {
     const c = conf(), A = S.gbAcc;
-    let h = headWord('가계부 설정', '', wide() ? '' : `<div class="tools"><button class="ico" aria-label="닫기" data-act="gView" data-v="book">${IC.x}</button></div>`) + '<div class="setpage">';
+    let h = headWord('머니북 설정', '', wide() ? '' : `<div class="tools"><button class="ico" aria-label="닫기" data-act="gView" data-v="book">${IC.x}</button></div>`) + '<div class="setpage">';
     const acc = (k, l) => `<button class="acc" data-act="gAcc" data-v="${k}"><span>${l}</span><span>${A[k] ? '−' : '+'}</span></button>`;
     h += acc('pay', '월급일');
     if (A.pay) {
@@ -395,7 +395,7 @@ export function setupGb(X) {
   }
 
   function lockPage() {
-    return `<div class="head"><div class="big"><h1 class="word">가계부</h1></div></div><div class="gpad"><div class="lockbox">${IC.lock}<b>가계부</b><button class="btn pri" data-act="gUnlock">열기</button></div></div>`;
+    return `<div class="head"><div class="big"><h1 class="word">머니북</h1></div></div><div class="gpad"><div class="lockbox">${IC.lock}<b>머니북</b><button class="btn pri" data-act="gUnlock">열기</button></div></div>`;
   }
   const locked = () => S.settings.recPin && !S.gbUnlock;
 
@@ -410,7 +410,7 @@ export function setupGb(X) {
     const l = entries(d, d);
     return `<aside class="rpanel"><p class="dt ${dayClass(d)}">${fmtMD(d)}${HOLIDAYS[d] ? ' · ' + HOLIDAYS[d] : ''}</p><p class="dn">${parse(d).getDate()}</p>${dayListG(d)}${l.length ? `<div class="gdt"><span>이날 합계</span>${dayTotal(l) || '0'}</div>` : ''}<button class="btn sm" style="margin-top:10px" data-act="gNew" data-d="${d}">추가</button></aside>`;
   }
-  const MENU = [['book', '가계부'], ['bud', '예산'], ['asset', '자산'], ['stat', '통계']];
+  const MENU = [['book', '데일리'], ['bud', '버짓북'], ['asset', '에셋북'], ['stat', '리포트']];
   const sideItems = () => MENU.map(([k, l]) => `<button class="mi ${S.gbView === k ? 'on' : ''}" data-act="gView" data-v="${k}">${gIc(k)}${l}</button>`).join('');
   const navTabs = () => MENU.map(([k, l]) => `<button class="${S.gbView === k ? 'on' : ''}" data-act="gView" data-v="${k}">${gIc(k)}<span>${l}</span></button>`).join('');
   const showFab = () => !locked() && S.gbView === 'book' && S.gbTab !== 'mon';
@@ -524,7 +524,7 @@ export function setupGb(X) {
     return h + '</div>';
   }
   const dayHtml = () => { const d = S.sheet.d; return `${band('#111111', `${fmtMD(d)}${HOLIDAYS[d] ? ' · ' + HOLIDAYS[d] : ''}`)}<div style="margin-top:12px">${dayListG(d)}</div><button class="btn pri" style="width:100%;margin-top:8px" data-act="gNew" data-d="${d}">추가</button>`; };
-  const xlsxHtml = () => { const sh = S.sheet; return `${band('#111111', '가계부 엑셀로 내보내기')}<div class="gform"><div class="two">${inp('시작', 'from', sh.from, 'date')}${inp('끝', 'to', sh.to, 'date')}</div></div>${errLine(sh)}<div class="acts"><button class="btn pri" data-act="gXlsxGo">내보내기</button></div>`; };
+  const xlsxHtml = () => { const sh = S.sheet; return `${band('#111111', '머니북 엑셀로 내보내기')}<div class="gform"><div class="two">${inp('시작', 'from', sh.from, 'date')}${inp('끝', 'to', sh.to, 'date')}</div></div>${errLine(sh)}<div class="acts"><button class="btn pri" data-act="gXlsxGo">내보내기</button></div>`; };
   const sheets = { gtx: txHtml, gfx: fxHtml, gbud: budHtml, gacc: accHtml, gcat: catHtml, gpick: pickHtml, gday: dayHtml, gxlsx: xlsxHtml };
 
   function refCount(kind, id) {
@@ -615,7 +615,7 @@ export function setupGb(X) {
       if (a.closed) { const c = clone(conf()); const x = c.accounts.find((y) => y.id === a.id); if (x) delete x.closed; saveConf(c); closeSheet(); return; }
       if (refCount('acc', a.id) === 0) {
         if (!armDel()) return;
-        try { await backupCurrent('가계부 통장 삭제 전 자동 백업'); } catch (e) { toast('백업을 하지 못해서 지우지 않았어요'); return; }
+        try { await backupCurrent('머니북 통장 삭제 전 자동 백업'); } catch (e) { toast('백업을 하지 못해서 지우지 않았어요'); return; }
         const c = clone(conf()); c.accounts = c.accounts.filter((x) => x.id !== a.id); saveConf(c); closeSheet(); return;
       }
       sh.delMode = 'keep'; render();
@@ -627,7 +627,7 @@ export function setupGb(X) {
       const c = clone(conf());
       if (sh.delMode === 'keep') { const x = c.accounts.find((y) => y.id === a.id); if (x) x.closed = true; saveConf(c); closeSheet(); toast('보관했어요. 설정에서 다시 쓸 수 있어요'); return; }
       if (!sh.moveTo) { sh.err = '옮길 통장을 골라 주세요.'; render(); return; }
-      try { await backupCurrent('가계부 통장 삭제 전 자동 백업'); } catch (e) { toast('백업을 하지 못해서 지우지 않았어요'); return; }
+      try { await backupCurrent('머니북 통장 삭제 전 자동 백업'); } catch (e) { toast('백업을 하지 못해서 지우지 않았어요'); return; }
       S.gbTx.forEach((t) => { if (t.acc === a.id || t.to === a.id) save('gbTx', { ...t, acc: t.acc === a.id ? sh.moveTo : t.acc, to: t.to === a.id ? sh.moveTo : t.to }); });
       S.gbFixed.forEach((t) => { if (t.acc === a.id || t.to === a.id) save('gbFixed', { ...t, acc: t.acc === a.id ? sh.moveTo : t.acc, to: t.to === a.id ? sh.moveTo : t.to }); });
       c.accounts = c.accounts.filter((x) => x.id !== a.id); saveConf(c); closeSheet(); toast('옮기고 지웠어요');
@@ -669,7 +669,7 @@ export function setupGb(X) {
     gCatDelCancel: () => { S.sheet.delMode = false; render(); },
     gCatDelGo: async () => {
       const sh = S.sheet, d = sh.draft;
-      try { await backupCurrent('가계부 분류 삭제 전 자동 백업'); } catch (e) { toast('백업을 하지 못해서 지우지 않았어요'); return; }
+      try { await backupCurrent('머니북 분류 삭제 전 자동 백업'); } catch (e) { toast('백업을 하지 못해서 지우지 않았어요'); return; }
       S.gbTx.forEach((t) => { if (t.cat === d.id) save('gbTx', { ...t, cat: sh.moveTo, sub: '' }); });
       S.gbFixed.forEach((t) => { if (t.cat === d.id) save('gbFixed', { ...t, cat: sh.moveTo, sub: '' }); });
       const c = clone(conf());
@@ -692,7 +692,7 @@ export function setupGb(X) {
       const y = +sh.from.slice(0, 4);
       const yr = yearRows(y).filter((r) => r.key).map((r) => [r.parent ? '  ' + r.name : r.name, ...r.vals, r.vals.reduce((s, v) => s + v, 0)]);
       try {
-        await writeXlsx(`플랜북_가계부_${sh.from.replace(/-/g, '')}-${sh.to.replace(/-/g, '')}.xlsx`, [
+        await writeXlsx(`플랜북_머니북_${sh.from.replace(/-/g, '')}-${sh.to.replace(/-/g, '')}.xlsx`, [
           { name: '내역', headers: ['날짜', '구분', '금액', '대분류', '소분류', '내용', '통장 · 카드', '받는 통장', '할부 · 고정', '메모'], widths: [12, 6, 12, 10, 12, 24, 14, 14, 10, 30], rows },
           { name: `${y} 연간표`, headers: ['항목', ...Array.from({ length: 12 }, (_, i) => `${i + 1}월`), '합계'], widths: [16, ...Array(13).fill(12)], rows: yr },
         ]);

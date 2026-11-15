@@ -1120,15 +1120,15 @@ const SW_IC = {
   gb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6l3 12 4-9 4 9 3-12M4 11h16"/></svg>',
 };
 // PC: 왼쪽 메뉴 맨 위 스위치
-const modeSwitch = () => `<button class="msw" data-act="gMode" data-v="${S.mode === 'gb' ? 'pb' : 'gb'}" aria-label="플랜북 · 가계부 바꾸기"><span class="swt ${S.mode === 'gb' ? 'on' : ''}"><i>${SW_IC[S.mode]}</i></span><span>${S.mode === 'gb' ? '가계부' : '플랜북'}</span></button>`;
+const modeSwitch = () => `<button class="msw" data-act="gMode" data-v="${S.mode === 'gb' ? 'pb' : 'gb'}" aria-label="플랜북 · 머니북 바꾸기"><span class="swt ${S.mode === 'gb' ? 'on' : ''}"><i>${SW_IC[S.mode]}</i></span><span>${S.mode === 'gb' ? '머니북' : '플랜북'}</span></button>`;
 // 폰: 왼쪽 위 제목을 누르면 고르는 창
-const popTitle = (page) => page.replace('<div class="big">', '<div class="big pt" data-act="modePop" role="button" aria-label="플랜북 · 가계부 고르기">');
-const modePopHtml = () => (S.modePop ? `<div class="mpbg" data-act="modePopX"></div><div class="mpop">${[['pb', '플랜북'], ['gb', '가계부']].map(([k, l]) => `<button data-act="gMode" data-v="${k}"><i>${SW_IC[k]}</i><span>${l}</span>${S.mode === k ? IC.check : ''}</button>`).join('')}</div>` : '');
+const popTitle = (page) => page.replace('<div class="big">', '<div class="big pt" data-act="modePop" role="button" aria-label="플랜북 · 머니북 고르기">');
+const modePopHtml = () => (S.modePop ? `<div class="mpbg" data-act="modePopX"></div><div class="mpop">${[['pb', '플랜북'], ['gb', '머니북']].map(([k, l]) => `<button data-act="gMode" data-v="${k}"><i>${SW_IC[k]}</i><span>${l}</span>${S.mode === k ? IC.check : ''}</button>`).join('')}</div>` : '');
 function renderGb() {
   const page = G.page();
   let html;
   if (wide()) {
-    html = `<div class="wide gb"><nav class="side">${modeSwitch()}${G.sideItems()}<div class="grow"></div><button class="mi sync ${S.syncing ? 'spin' : ''}" data-act="sync">${IC.sync}<span>동기화</span><small>${S.syncAt ? fmtAt(S.syncAt).slice(11) : ''}</small></button><button class="mi set ${S.gbView === 'set' ? 'on' : ''}" data-act="gView" data-v="set">${G.setIcon()}가계부 설정</button></nav><main class="main">${page}</main>${G.rpanel()}${sheetHtml()}</div>`;
+    html = `<div class="wide gb"><nav class="side">${modeSwitch()}${G.sideItems()}<div class="grow"></div><button class="mi sync ${S.syncing ? 'spin' : ''}" data-act="sync">${IC.sync}<span>동기화</span><small>${S.syncAt ? fmtAt(S.syncAt).slice(11) : ''}</small></button><button class="mi set ${S.gbView === 'set' ? 'on' : ''}" data-act="gView" data-v="set">${G.setIcon()}머니북 설정</button></nav><main class="main">${page}</main>${G.rpanel()}${sheetHtml()}</div>`;
   } else {
     const fab = G.showFab() ? `<button class="fab" aria-label="추가" data-act="gFab">${IC.plus}</button>` : '';
     html = `<div class="phone gb"><div class="page">${popTitle(page)}</div>${S.gbView !== 'set' ? `<nav class="nav n4">${G.navTabs()}</nav>` : ''}${fab}${modePopHtml()}${sheetHtml()}</div>`;
@@ -1190,7 +1190,7 @@ async function ensureSettingsAndBackup() {
   }
 }
 // ---------- 데이터 점검 · 합치기 복원 ----------
-const CK = [['ev', '일정'], ['td', '할 일'], ['pj', '플젝'], ['mt', '회의'], ['mm', '메모'], ['rc', '기록'], ['rt', '루틴'], ['yb', '이어북 칠한 날'], ['ct', '분류 · 주제'], ['gb', '가계부 내역 · 고정'], ['gc', '가계부 통장 · 분류']];
+const CK = [['ev', '일정'], ['td', '할 일'], ['pj', '플젝'], ['mt', '회의'], ['mm', '메모'], ['rc', '기록'], ['rt', '루틴'], ['yb', '이어북 칠한 날'], ['ct', '분류 · 주제'], ['gb', '머니북 내역 · 고정'], ['gc', '머니북 통장 · 분류']];
 const ckKey = (name, o) => name === 'gbTx' || name === 'gbFixed' ? 'gb' : name === 'items' ? (o.type === 'todo' ? 'td' : 'ev') : name === 'notes' ? (o.kind === 'meeting' ? 'mt' : 'mm') : name === 'records' ? 'rc' : name === 'projects' ? 'pj' : 'rt';
 const zeroC = () => Object.fromEntries(CK.map(([k]) => [k, 0]));
 function countsOf(d) {
@@ -1227,8 +1227,8 @@ function labelOf(name, o) {
   if (name === 'notes') return `${(o.date || '').replace(/-/g, '.')} ${o.title || '(제목 없음)'}`;
   if (name === 'records') return `${RK[o.kind] || '기록'} ${o.name || o.year || o.company || ''} ${o.date || ''}`.trim();
   if (name === 'projects') return `플젝 ${o.name || ''}`;
-  if (name === 'gbTx') return `가계부 ${(o.date || '').replace(/-/g, '.')} ${o.title || ''} ${o.amount || ''}`.trim();
-  if (name === 'gbFixed') return `가계부 고정 ${o.title || ''}`;
+  if (name === 'gbTx') return `머니북 ${(o.date || '').replace(/-/g, '.')} ${o.title || ''} ${o.amount || ''}`.trim();
+  if (name === 'gbFixed') return `머니북 고정 ${o.title || ''}`;
   return `루틴 ${o.title || ''}`;
 }
 // 지금(cur)에 파일(file)을 합치는 계획. 지금 있는 것은 그대로 둠
@@ -1322,8 +1322,8 @@ function verifyMerge(file, after) {
   (fs.cats || []).forEach((c) => { if ((st.cats || []).some((x) => x.id === c.id)) got.ct++; else missing.push(`분류 ${c.name || ''}`); });
   (fs.topics || []).forEach((t) => { if ((st.topics || []).some((x) => x.id === t.id)) got.ct++; else missing.push(`주제 ${t.name || ''}`); });
   const gA = (after.gbConf || []).find((x) => x.id === 'main') || {}, gF = (file.gbConf || []).find((x) => x.id === 'main') || {};
-  (gF.accounts || []).forEach((a) => { if ((gA.accounts || []).some((x) => x.id === a.id)) got.gc++; else missing.push(`가계부 통장 ${a.name || ''}`); });
-  ['exp', 'inc'].forEach((k) => (gF[k] || []).forEach((c) => { if ((gA[k] || []).some((x) => x.id === c.id)) got.gc++; else missing.push(`가계부 분류 ${c.name || ''}`); }));
+  (gF.accounts || []).forEach((a) => { if ((gA.accounts || []).some((x) => x.id === a.id)) got.gc++; else missing.push(`머니북 통장 ${a.name || ''}`); });
+  ['exp', 'inc'].forEach((k) => (gF[k] || []).forEach((c) => { if ((gA[k] || []).some((x) => x.id === c.id)) got.gc++; else missing.push(`머니북 분류 ${c.name || ''}`); }));
   return { got, missing };
 }
 // 백업에는 있는데 지금은 없는 것
@@ -2028,7 +2028,7 @@ D.onUser((user) => {
     }, (err, name) => {
       console.error(err);
       if (name && !S.loaded[name]) { S.loaded[name] = true; render(); }
-      toast(name === 'projects' ? '플젝북을 불러오지 못했어요' : (name || '').startsWith('gb') ? '가계부를 불러오지 못했어요' : '데이터를 불러오지 못했어요');
+      toast(name === 'projects' ? '플젝북을 불러오지 못했어요' : (name || '').startsWith('gb') ? '머니북를 불러오지 못했어요' : '데이터를 불러오지 못했어요');
     });
   }
   render();

@@ -170,23 +170,23 @@ export function setupGb(X) {
       const rows = [];
       let ti = 0, te = 0;
       for (let i = 0; i < 12; i++) {
-        const l = entries(ymd(new Date(y, i, 1)), ymd(new Date(y, i + 1, 0)));
+        const PR = periodOf(y, i); const l = entries(PR.start, PR.end);
         const a = incOf(l), b = expOf(l); ti += a; te += b;
-        rows.push(`<button class="gmrow ${i === new Date().getMonth() && y === new Date().getFullYear() ? 'cur' : ''}" data-act="gGoMonth" data-v="${i}"><span>${i + 1}월</span><span class="gin">${a ? won(a) : '–'}</span><span class="gout">${b ? won(b) : '–'}</span><span>${a || b ? sgn(a - b) : '–'}</span></button>`);
+        rows.push(`<button class="gmrow ${curLabel()[0] === y && curLabel()[1] === i ? 'cur' : ''}" data-act="gGoMonth" data-v="${i}"><span>${i + 1}월</span><span class="gin">${a ? won(a) : '–'}</span><span class="gout">${b ? won(b) : '–'}</span><span>${a || b ? sgn(a - b) : '–'}</span></button>`);
       }
       return headWord(String(y), '', tools('gYPrev', 'gYNext')) + tabs([['day', '일일'], ['cal', '달력'], ['mon', '월별']], tab, 'gTab') + sumBar(ti, te)
         + `<div class="gpad"><div class="gmrow h"><span>월</span><span>수입</span><span>지출</span><span>합계</span></div>${rows.join('')}</div>`;
     }
-    const from = ymd(new Date(y, m, 1)), to = ymd(new Date(y, m + 1, 0));
+    const PR0 = periodOf(y, m), from = PR0.start, to = PR0.end;
     const l = entries(from, to);
     const PP = periodOf(y, m);
-    let h = (tab === 'cal' ? `<div class="head"><div class="big"><h1>${m + 1}</h1><div class="sub"><p class="y">${y}</p><p class="m">${md(PP.start)} – ${md(PP.end)}</p></div></div>${tools('gMPrev', 'gMNext')}</div>` : headMonth(y, m, tools('gMPrev', 'gMNext'))) + tabs([['day', '일일'], ['cal', '달력'], ['mon', '월별']], tab, 'gTab') + (tab === 'cal' ? '<div style="height:8px"></div>' : sumBar(incOf(l), expOf(l)));
+    let h = (tab === 'cal' || tab === 'day' ? `<div class="head"><div class="big"><h1>${m + 1}</h1><div class="sub"><p class="y">${y}</p><p class="m">${md(PP.start)} – ${md(PP.end)}</p></div></div>${tools('gMPrev', 'gMNext')}</div>` : headMonth(y, m, tools('gMPrev', 'gMNext'))) + tabs([['day', '일일'], ['cal', '달력'], ['mon', '월별']], tab, 'gTab') + (tab === 'cal' ? '<div style="height:8px"></div>' : sumBar(incOf(l), expOf(l)));
     if (tab === 'day') {
       const by = new Map();
       l.filter((e) => e.date <= todayStr() || e.src === 'tx').sort(sortE).forEach((e) => { if (!by.has(e.date)) by.set(e.date, []); by.get(e.date).push(e); });
       h += '<div class="gpad gbot">';
       if (!by.size) h += '<p class="empty" style="padding:16px 2px">내역 없음</p>';
-      by.forEach((list, d) => { h += `<div class="gdh"><b class="${dayClass(d)}">${+d.slice(8)}일 ${WD[parse(d).getDay()]}요일</b>${dayTotal(list)}</div>${list.map(txRow).join('')}`; });
+      by.forEach((list, d) => { h += `<div class="gdh"><b class="${dayClass(d)}">${+d.slice(5, 7) !== m + 1 ? `${+d.slice(5, 7)}월 ` : ''}${+d.slice(8)}일 ${WD[parse(d).getDay()]}요일</b>${dayTotal(list)}</div>${list.map(txRow).join('')}`; });
       return h + '</div>';
     }
     // 달력: 전월 월급일 ~ 이번 달 월급일 전날
@@ -288,7 +288,7 @@ export function setupGb(X) {
 
   // ---------- 통계 ----------
   function monthAgg(y, i) {
-    const l = entries(ymd(new Date(y, i, 1)), ymd(new Date(y, i + 1, 0)));
+    const PR = periodOf(y, i); const l = entries(PR.start, PR.end);
     const t = todayStr();
     return l.filter((e) => e.date <= t || e.src === 'tx');
   }
@@ -317,7 +317,8 @@ export function setupGb(X) {
     if (S.gbStatTab === 'mon') {
       const [yy, m] = S.gbMonth;
       const l = monthAgg(yy, m);
-      h = headMonth(yy, m, tools('gMPrev', 'gMNext')) + tabs([['mon', '월별'], ['year', '연간']], 'mon', 'gStatTab') + sumBar(incOf(l), expOf(l));
+      const PQ = periodOf(yy, m);
+      h = `<div class="head"><div class="big"><h1>${m + 1}</h1><div class="sub"><p class="y">${yy}</p><p class="m">${md(PQ.start)} – ${md(PQ.end)}</p></div></div>${tools('gMPrev', 'gMNext')}</div>` + tabs([['mon', '월별'], ['year', '연간']], 'mon', 'gStatTab') + sumBar(incOf(l), expOf(l));
       const ex = l.filter((e) => e.type === 'exp'), tot = sum(ex) || 1;
       const prev = monthAgg(m === 0 ? yy - 1 : yy, m === 0 ? 11 : m - 1).filter((e) => e.type === 'exp');
       const rows = catList('exp').map((c) => ({ c, v: sum(ex.filter((e) => e.cat === c.id)), pv: sum(prev.filter((e) => e.cat === c.id)) })).filter((r) => r.v || r.pv).sort((a, b) => b.v - a.v);
@@ -331,7 +332,7 @@ export function setupGb(X) {
     const xl = wide() ? `<button class="btn sm" style="margin-right:8px" data-act="gXlsx">엑셀로 내보내기</button>` : '';
     h = headWord('리포트', `<div class="sub"><p class="y">&nbsp;</p><p class="m">${y}</p></div>`, tools('gYPrev', 'gYNext', xl)) + tabs([['mon', '월별'], ['year', '연간']], 'year', 'gStatTab');
     const rows = yearRows(y);
-    const cm = new Date().getFullYear() === y ? new Date().getMonth() : -1;
+    const cm = curLabel()[0] === y ? curLabel()[1] : -1;
     if (wide()) {
       let t = `<div class="gyt"><table class="yt"><thead><tr><th>${y}</th>${Array.from({ length: 12 }, (_, i) => `<th class="${i === cm ? 'cur' : ''}">${i + 1}월</th>`).join('')}<th class="tot">합계</th></tr></thead><tbody>`;
       rows.forEach((r) => {

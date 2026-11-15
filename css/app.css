@@ -598,3 +598,11 @@ html.dark .sitem.lift{box-shadow:0 6px 18px rgba(255,255,255,.25)}
 .gdate input::-webkit-datetime-edit{opacity:0}
 .gdate span{position:absolute;left:13px;top:50%;transform:translateY(-50%);pointer-events:none;font-size:15px;font-variant-numeric:tabular-nums}
 .gct{table-layout:fixed}.gct th:nth-child(2){width:80px}.gct th:nth-child(3){width:106px}.gct td.p{width:auto}.gct td.v{width:auto}.gct td:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gbmode{display:flex;justify-content:space-between;align-items:center;margin:14px 0 2px;padding:0 0 10px;border-bottom:1.5px solid #111}
+.gbmode>span{font-size:14px;color:#6B6B6B}
+.gbmode .sg{display:grid;grid-template-columns:1fr 1fr;border:1.5px solid #111;width:206px}
+.gbmode .sg button{height:34px;font-size:13px}
+.gbmode .sg button.on{background:#111;color:#fff;font-weight:500}
+.gbmode .sg button+button{border-left:1px solid #111}
+.gbmode+.gct{margin-top:0}
+.gbmode+.gct th{border-top:none}

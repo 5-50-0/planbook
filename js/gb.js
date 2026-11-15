@@ -46,6 +46,7 @@ export function setupGb(X) {
     return c ? { payday: 25, budget: {}, accounts: [], exp: [], inc: [], ...c } : S.gbConfMem;
   };
   const saveConf = (c) => save('gbConf', { ...c, id: 'main' });
+  const FAIL = '저장하지 못했어요. 입력한 내용은 그대로 있어요.';
   const accs = (all) => conf().accounts.filter((a) => all || !a.closed);
   const accOf = (id) => conf().accounts.find((a) => a.id === id);
   const catList = (kind) => conf()[kind] || [];
@@ -217,25 +218,26 @@ export function setupGb(X) {
   }
 
   // ---------- 예산 금액 (기본 예산 + 달마다 따로) ----------
-  // budgetV[key] = { base: [['YYYY-MM', 금액], ...], over: { 'YYYY-MM': 금액 } }
+  // budgetV[key] = { base: { 'YYYY-MM': 금액 }, over: { 'YYYY-MM': 금액 } }  (Firestore는 배열 안 배열을 못 씀)
   // key: 소분류 id 또는 'c:' + 대분류 id. 예전 budget(한 벌)은 처음부터 쓰던 기본 예산으로 읽음
   const lab = (y, m) => `${y}-${String(m + 1).padStart(2, '0')}`;
   function bv(c = conf()) {
     if (c.budgetV) return c.budgetV;
     const out = {};
     const catIds = new Set(catList('exp').map((x) => x.id));
-    Object.entries(c.budget || {}).forEach(([k, v]) => { if (v > 0) out[catIds.has(k) ? 'c:' + k : k] = { base: [['0000-00', v]], over: {} }; });
+    Object.entries(c.budget || {}).forEach(([k, v]) => { if (v > 0) out[catIds.has(k) ? 'c:' + k : k] = { base: { '0000-00': v }, over: {} }; });
     return out;
   }
-  function baseAt(e, L) { let v = 0; (e?.base || []).slice().sort((a, b) => (a[0] < b[0] ? -1 : 1)).forEach(([f, a]) => { if (f <= L) v = a; }); return v; }
+  const baseList = (e) => (Array.isArray(e?.base) ? e.base : Object.entries(e?.base || {}));
+  function baseAt(e, L) { let v = 0; baseList(e).slice().sort((a, b) => (a[0] < b[0] ? -1 : 1)).forEach(([f, a]) => { if (f <= L) v = a; }); return v; }
   function budAt(key, y, m, B = bv()) { const e = B[key]; if (!e) return 0; const L = lab(y, m); return e.over && L in e.over ? e.over[L] : baseAt(e, L); }
   const isOver = (key, y, m, B = bv()) => !!(B[key]?.over && lab(y, m) in B[key].over);
   function setBase(B, key, y, m, v) {
-    const L = lab(y, m), e = B[key] || (B[key] = { base: [], over: {} });
-    e.base = (e.base || []).filter(([f]) => f !== L);
-    if (baseAt(e, L) !== v) e.base.push([L, v]);
+    const L = lab(y, m), e = B[key] || (B[key] = { base: {}, over: {} });
+    e.base = Object.fromEntries(baseList(e).filter(([f]) => f !== L));
+    if (baseAt(e, L) !== v) e.base[L] = v;
   }
-  function setOver(B, key, y, m, v) { const e = B[key] || (B[key] = { base: [], over: {} }); e.over = e.over || {}; if (v === null) delete e.over[lab(y, m)]; else e.over[lab(y, m)] = v; }
+  function setOver(B, key, y, m, v) { const e = B[key] || (B[key] = { base: {}, over: {} }); e.over = e.over || {}; if (v === null) delete e.over[lab(y, m)]; else e.over[lab(y, m)] = v; }
   // 대분류 예산이 소분류 합보다 작으면 안 됨
   function budCheck(B, y, m) {
     for (const c of catList('exp')) {
@@ -556,7 +558,7 @@ export function setupGb(X) {
     const sh = S.sheet, b = sh.draft, B = bv();
     const py = sh.m === 0 ? sh.y - 1 : sh.y, pm = sh.m === 0 ? 11 : sh.m - 1;
     let h = band('#111111', `${sh.m + 1}월 예산`);
-    h += `<div class="gtabs gbtab">${[['cont', `${sh.m + 1}월부터 계속`], ['only', `${sh.m + 1}월만`]].map(([k, l]) => `<button class="${sh.mode === k ? 'on' : ''}" data-act="gBudMode" data-v="${k}">${l}</button>`).join('')}</div>`;
+    h += `<div class="gbmode"><span>적용</span><div class="sg">${[['cont', `${sh.m + 1}월부터 계속`], ['only', `${sh.m + 1}월만`]].map(([k, l]) => `<button class="${sh.mode === k ? 'on' : ''}" data-act="gBudMode" data-v="${k}">${l}</button>`).join('')}</div></div>`;
     h += `<table class="gct"><thead><tr><th>분류</th><th>지난달</th><th>${sh.m + 1}월</th></tr></thead><tbody>`;
     const cell = (k, c) => { const v = b[k]; const ov = sh.mode === 'only' && isOver(k, sh.y, sh.m, B); return `<td class="v"><input id="gb_${k.replace(':', '_')}" data-gb="${k}" data-c="${c}" inputmode="numeric" autocomplete="off" class="${ov ? 'ov' : ''}" value="${v ? commas(v) : ''}"></td>`; };
     catList('exp').forEach((c) => {
@@ -696,7 +698,8 @@ export function setupGb(X) {
       if (d.type !== 'tr') { delete d.fee; delete d.asExp; } else { d.fee = +d.fee || 0; d.asExp = !!d.asExp; }
       d.inst = Math.max(1, Math.min(60, +d.inst || 1));
       if (d.type !== 'tr') d.to = '';
-      save('gbTx', d); closeSheet();
+      if (!save('gbTx', d)) { sh.err = FAIL; render(); return; }
+      closeSheet();
     },
     gTxDel: () => { if (!armDel()) return; D.deleteDocIn(U(), 'gbTx', S.sheet.draft.id); closeSheet(); },
     gFxNew: () => { if (!guardAcc()) return; ensureConf(); openSheet({ kind: 'gfx', isNew: true, draft: { id: uid(), type: 'exp', title: '', amount: 0, day: 25, start: todayStr(), end: '', acc: accs()[0]?.id || '', to: '', cat: '', sub: '', memo: '', created: Date.now() } }); },
@@ -714,7 +717,8 @@ export function setupGb(X) {
       if (!d.start) { sh.err = '시작일을 골라 주세요.'; render(); return; }
       if (d.end && d.end < d.start) { sh.err = '종료일이 시작일보다 빨라요.'; render(); return; }
       d.day = +d.day || 1;
-      save('gbFixed', d); closeSheet();
+      if (!save('gbFixed', d)) { sh.err = FAIL; render(); return; }
+      closeSheet();
     },
     gFxDel: () => { if (!armDel()) return; D.deleteDocIn(U(), 'gbFixed', S.sheet.draft.id); closeSheet(); },
     gBudEdit: (el) => {
@@ -735,7 +739,8 @@ export function setupGb(X) {
         else setOver(B, k, sh.y, sh.m, v);
       });
       const err = budCheck(B, sh.y, sh.m); if (err) { sh.err = err; render(); return; }
-      saveConf({ ...c, budgetV: B }); closeSheet();
+      if (!saveConf({ ...c, budgetV: B })) { sh.err = FAIL; render(); return; }
+      closeSheet();
     },
     gBudKey: (el) => ACT.gBudEdit(el),
     gBkY: (el) => { const sh = S.sheet; sh.y += +el.dataset.v; sh.edit = null; render(); },
@@ -773,7 +778,8 @@ export function setupGb(X) {
         a.name = name; a.type = d.type; if (d.color) a.color = d.color;
         if (d.type !== 'card') { const cur = balance({ ...a, adj: 0 }); a.adj = (d.bal || 0) - cur; }
       }
-      saveConf(c); closeSheet();
+      if (!saveConf(c)) { sh.err = FAIL; render(); return; }
+      closeSheet();
     },
     gAccDel: async () => {
       const sh = S.sheet, a = sh.draft;
@@ -823,7 +829,8 @@ export function setupGb(X) {
         }
         list[i] = { ...list[i], name, color: d.color, subs: d.subs };
       } else list.push({ id: d.id, name, color: d.color, subs: d.subs });
-      saveConf(c); closeSheet();
+      if (!saveConf(c)) { sh.err = FAIL; render(); return; }
+      closeSheet();
     },
     gCatDel: () => {
       const sh = S.sheet;

@@ -1170,7 +1170,14 @@ function newForm(d) {
   swapSheet({ kind: 'edit', draft: newItem('event', d), isNew: true });
   setTimeout(() => document.getElementById('bandT')?.focus(), 30);
 }
-const save = (name, obj) => { try { D.saveDoc(U(), name, obj); } catch (e) { toast('저장하지 못했어요'); } };
+// 저장: 바로 거절되면 false (입력 창을 닫지 않게), 나중에 실패하면 알림
+const save = (name, obj) => {
+  try {
+    const p = D.saveDoc(U(), name, obj);
+    if (p && p.catch) p.catch((e) => { console.error(e); toast('저장하지 못했어요'); });
+    return true;
+  } catch (e) { console.error(e); toast('저장하지 못했어요'); return false; }
+};
 const armDel = () => { if (!S.delArm) { S.delArm = true; render(); return false; } return true; };
 
 function snapshot() {

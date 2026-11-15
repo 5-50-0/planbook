@@ -55,7 +55,7 @@ const S = {
   // 가계부
   mode: 'pb', modePop: false, gbTx: [], gbFixed: [], gbConf: [], gbUnlock: false,
   gbView: 'book', gbTab: 'cal', gbMonth: [new Date().getFullYear(), new Date().getMonth()], gbSel: todayStr(),
-  gbBudOff: 0, gbBudTab: 'bud', gbStatTab: 'mon', gbYear: new Date().getFullYear(), gbPick: '_net', gbExpand: new Set(), gbAcc: {}, gbCatOpen: new Set(),
+  gbBudOff: 0, gbBudTab: 'bud', gbStatTab: 'mon', gbChart: 'pie', gbYear: new Date().getFullYear(), gbPick: '_net', gbExpand: new Set(), gbAcc: {}, gbCatOpen: new Set(),
 };
 let unwatch = null;
 const $app = document.getElementById('app');

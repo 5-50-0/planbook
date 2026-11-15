@@ -380,19 +380,44 @@ export function setupGb(X) {
       const [yy, m] = S.gbMonth;
       const l = monthAgg(yy, m);
       const PQ = periodOf(yy, m);
-      h = `<div class="head"><div class="big"><h1>${m + 1}</h1><div class="sub"><p class="y">${yy}</p><p class="m">${md(PQ.start)} – ${md(PQ.end)}</p></div></div>${tools('gMPrev', 'gMNext')}</div>` + tabs([['mon', '월별'], ['year', '연간']], 'mon', 'gStatTab') + sumBar(incOf(l), expOf(l));
+      h = `<div class="head"><div class="big"><h1>${m + 1}</h1><div class="sub"><p class="y">${yy}</p><p class="m">${md(PQ.start)} – ${md(PQ.end)}</p></div></div>${tools('gMPrev', 'gMNext')}</div>` + tabs([['mon', '월간'], ['year', '연간']], 'mon', 'gStatTab') + sumBar(incOf(l), expOf(l));
       const ex = l.filter(isE), tot = sum(ex, amtE) || 1;
       const prev = monthAgg(m === 0 ? yy - 1 : yy, m === 0 ? 11 : m - 1).filter(isE);
       const rows = catList('exp').map((c) => ({ c, v: sum(ex.filter((e) => e.cat === c.id), amtE), pv: sum(prev.filter((e) => e.cat === c.id), amtE) })).filter((r) => r.v || r.pv).sort((a, b) => b.v - a.v);
       const max = Math.max(1, ...rows.map((r) => r.v));
-      h += `<div class="gpad gbot"><div class="ggh"><b>분류별 지출</b><span>전월 대비</span></div>`;
-      h += rows.map((r) => { const d = r.pv ? Math.round(((r.v - r.pv) / r.pv) * 100) : null; return `<div class="gcr"><span>${esc(r.c.name)}</span><span class="b"><i style="width:${(r.v / max) * 100}%;background:#6B6B6B"></i></span><span class="v">${won(r.v)}</span><span class="c ${d > 0 ? 'gout' : d < 0 ? 'gin' : ''}">${d === null ? '' : (d > 0 ? '+' : '') + d + '%'}</span></div>`; }).join('') || '<p class="empty" style="padding:10px 2px">없음</p>';
+      const isLine = S.gbChart === 'line';
+      h += `<div class="gpad gbot"><div class="gbmode gchsw"><span>${isLine ? '누적 지출' : '분류별 비율'}</span><div class="sg"><button class="${isLine ? '' : 'on'}" data-act="gChart" data-v="pie">비율</button><button class="${isLine ? 'on' : ''}" data-act="gChart" data-v="line">누적</button></div></div>`;
+      if (!isLine) {
+        // 도넛: 분류별 비율 (검정 → 회색 단계)
+        const pr = rows.filter((r) => r.v > 0), n = pr.length;
+        const shade = (i) => { const c = Math.round(17 + i * (n > 1 ? Math.min(45, 190 / (n - 1)) : 0)); return `rgb(${c},${c},${c})`; };
+        const R = 80, C = 2 * Math.PI * R; let off = 0;
+        const arcs = pr.map((r, i) => { const len = (r.v / tot) * C; const a = `<circle r="${R}" cx="100" cy="100" fill="none" stroke="${shade(i)}" stroke-width="22" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}" transform="rotate(-90 100 100)"/>`; off += len; return a; }).join('');
+        h += `<div class="gdn"><svg viewBox="0 0 200 200" class="gdnsvg">${arcs || `<circle r="${R}" cx="100" cy="100" fill="none" stroke="#EDEDED" stroke-width="22"/>`}<text x="100" y="94" text-anchor="middle" font-size="12" fill="#6B6B6B">지출</text><text x="100" y="116" text-anchor="middle" font-size="17" font-weight="500" fill="#C0392B">${won(sum(ex, amtE))}</text></svg>`;
+        h += `<div class="gdnl"><div class="gdlr h"><span></span><span></span><span>비율</span><span>금액</span><span>전월 대비</span></div>` + (rows.map((r, i) => { const d = r.pv ? Math.round(((r.v - r.pv) / r.pv) * 100) : null; return `<div class="gdlr"><i style="background:${r.v > 0 ? shade(i) : '#fff'}"></i><span>${esc(r.c.name)}</span><em>${r.v ? Math.round((r.v / tot) * 100) + '%' : ''}</em><b>${won(r.v)}</b><span class="c ${d > 0 ? 'gout' : d < 0 ? 'gin' : ''}">${d === null ? '' : (d > 0 ? '+' : '') + d + '%'}</span></div>`; }).join('') || '<p class="empty" style="padding:10px 2px">없음</p>') + '</div></div>';
+      } else {
+        // 누적 지출: 이번 기간(오늘 이후 점선) vs 지난 기간
+        const PV = periodOf(m === 0 ? yy - 1 : yy, m === 0 ? 11 : m - 1);
+        const cumOf = (P) => { const all = entries(P.start, P.end).filter(isE); const out = []; let c = 0; for (let d = P.start; d <= P.end; d = addDays(d, 1)) { c += sum(all.filter((e) => e.date === d), amtE); out.push([d, c]); } return out; };
+        const cur = cumOf(PQ), pv = cumOf(PV), N = Math.max(cur.length, pv.length);
+        const top = Math.max(1, cur[cur.length - 1][1], pv[pv.length - 1][1]) * 1.08, Hh = 200;
+        const X = (i) => (N > 1 ? (i / (N - 1)) * 1000 : 0), Y = (v) => Hh - (v / top) * Hh;
+        const pts = (a) => a.map(([, v], i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+        const t = todayStr(); const ti = cur.findIndex(([d]) => d > t);
+        const past = ti < 0 ? cur : cur.slice(0, ti), fut = ti < 0 ? [] : cur.slice(Math.max(0, ti - 1));
+        const futPts = fut.map(([, v], i) => `${X(i + Math.max(0, ti - 1)).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+        const ticks = cur.map(([d], i) => [d, i]).filter(([d], i) => i === 0 || ['01', '10', '20'].includes(d.slice(8)));
+        h += `<div class="glnlg"><span><i style="background:#C0392B"></i>이번 달</span><span><i style="background:#BDBDBD"></i>지난달</span></div>`;
+        h += `<div class="gln"><svg viewBox="0 0 1000 ${Hh}" preserveAspectRatio="none"><polyline points="${pts(pv)}" fill="none" stroke="#BDBDBD" stroke-width="2" vector-effect="non-scaling-stroke"/>${past.length > 1 ? `<polyline points="${pts(past)}" fill="none" stroke="#C0392B" stroke-width="2.5" vector-effect="non-scaling-stroke"/>` : ''}${fut.length > 1 ? `<polyline points="${futPts}" fill="none" stroke="#C0392B" stroke-width="2" stroke-dasharray="4 4" opacity=".5" vector-effect="non-scaling-stroke"/>` : ''}</svg><div class="glnx">${ticks.map(([d, i]) => `<span style="left:${X(i) / 10}%">${+d.slice(5, 7)}.${+d.slice(8)}</span>`).join('')}</div></div>`;
+        h += `<div class="ggh"><b>분류별 지출</b><span>전월 대비</span></div>`;
+        h += rows.map((r) => { const d = r.pv ? Math.round(((r.v - r.pv) / r.pv) * 100) : null; return `<div class="gcr"><span>${esc(r.c.name)}</span><span class="b"><i style="width:${(r.v / max) * 100}%;background:#6B6B6B"></i></span><span class="v">${won(r.v)}</span><span class="c ${d > 0 ? 'gout' : d < 0 ? 'gin' : ''}">${d === null ? '' : (d > 0 ? '+' : '') + d + '%'}</span></div>`; }).join('') || '<p class="empty" style="padding:10px 2px">없음</p>';
+      }
       const sv = accs(true).filter((a) => a.type === 'saving').map((a) => [a, savIn(l, a.id)]).filter(([, v]) => v);
       if (sv.length) h += `<div class="ggh"><b>저축</b><span>${won(sum(sv, ([, v]) => v))}</span></div>${sv.map(([a, v]) => `<div class="gcr two"><span>${esc(a.name)}</span><span></span><span class="v">${won(v)}</span></div>`).join('')}`;
       return h + `<p class="mut" style="font-size:12px;margin-top:8px">${tot ? '' : ''}</p></div>`;
     }
     const xl = wide() ? `<button class="btn sm" style="margin-right:8px" data-act="gXlsx">엑셀로 내보내기</button>` : '';
-    h = headWord('리포트', `<div class="sub"><p class="y">&nbsp;</p><p class="m">${y}</p></div>`, tools('gYPrev', 'gYNext', xl)) + tabs([['mon', '월별'], ['year', '연간']], 'year', 'gStatTab');
+    h = headWord('리포트', `<div class="sub"><p class="y">&nbsp;</p><p class="m">${y}</p></div>`, tools('gYPrev', 'gYNext', xl)) + tabs([['mon', '월간'], ['year', '연간']], 'year', 'gStatTab');
     const rows = yearRows(y);
     const cm = curLabel()[0] === y ? curLabel()[1] : -1;
     if (wide()) {
@@ -693,6 +718,7 @@ export function setupGb(X) {
     gBPrev: () => { S.gbBudOff = (S.gbBudOff || 0) - 1; render(); }, gBNext: () => { S.gbBudOff = (S.gbBudOff || 0) + 1; render(); },
     gBudTab: (el) => { S.gbBudTab = el.dataset.v; render(); },
     gStatTab: (el) => { S.gbStatTab = el.dataset.v; render(); },
+    gChart: (el) => { S.gbChart = el.dataset.v; render(); },
     gExpand: (el) => { const v = el.dataset.v; if (S.gbExpand.has(v)) S.gbExpand.delete(v); else S.gbExpand.add(v); render(); },
     gPick: () => openSheet({ kind: 'gpick' }),
     gPickSet: (el) => { S.gbPick = el.dataset.v; closeSheet(); },

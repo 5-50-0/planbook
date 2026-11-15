@@ -92,26 +92,30 @@ export function setupGb(X) {
   }
 
   // ---------- 내역 펼치기 (할부 · 고정) ----------
+  // 할부: 카드 지출이면 n개월로 나눔 (고정 지출도 같음)
+  const instN = (t) => (t.type === 'exp' && accOf(t.acc)?.type === 'card' ? Math.max(1, +t.inst || 1) : 1);
+  function pushSplit(out, t, date, from, to, extra) {
+    const n = instN(t);
+    if (n === 1) { if (date >= from && date <= to) out.push({ ...t, ...extra, date }); return; }
+    const d0 = parse(date), per = Math.floor(t.amount / n);
+    for (let k = 0; k < n; k++) {
+      const d = mkDate(d0.getFullYear(), d0.getMonth() + k, d0.getDate());
+      if (d < from || d > to) continue;
+      out.push({ ...t, ...extra, key: `${extra.key}~${k}`, date: d, amount: k === n - 1 ? t.amount - per * (n - 1) : per, total: t.amount, k: k + 1, n });
+    }
+  }
   function entries(from, to) {
     const out = [];
-    S.gbTx.forEach((t) => {
-      const n = t.type === 'exp' && accOf(t.acc)?.type === 'card' ? Math.max(1, +t.inst || 1) : 1;
-      if (n === 1) { if (t.date >= from && t.date <= to) out.push({ ...t, src: 'tx', key: t.id }); return; }
-      const d0 = parse(t.date), per = Math.floor(t.amount / n);
-      for (let k = 0; k < n; k++) {
-        const d = mkDate(d0.getFullYear(), d0.getMonth() + k, d0.getDate());
-        if (d < from || d > to) continue;
-        out.push({ ...t, src: 'tx', key: `${t.id}~${k}`, date: d, amount: k === n - 1 ? t.amount - per * (n - 1) : per, total: t.amount, k: k + 1, n });
-      }
-    });
+    S.gbTx.forEach((t) => pushSplit(out, t, t.date, from, to, { src: 'tx', key: t.id }));
     S.gbFixed.forEach((f) => {
       if (!f.start) return;
       const s = parse(f.start); const last = f.end && f.end < to ? f.end : to;
       for (let i = 0; i < 1200; i++) {
         const d = mkDate(s.getFullYear(), s.getMonth() + i, +f.day || s.getDate());
         if (d > last) break;
-        if (d < f.start || d < from) continue;
-        out.push({ ...f, src: 'fx', key: `${f.id}~${d}`, date: d, fixed: true });
+        if (d < f.start) continue;
+        if (instN(f) === 1 && d < from) continue;
+        pushSplit(out, f, d, from, to, { src: 'fx', key: `${f.id}~${d}`, fixed: true });
       }
     });
     return out;
@@ -136,7 +140,16 @@ export function setupGb(X) {
   }
   function installs(cardId) {
     const t = todayStr();
-    return S.gbTx.filter((x) => x.type === 'exp' && x.acc === cardId && (+x.inst || 1) > 1).map((x) => {
+    const fx = [];
+    S.gbFixed.filter((f) => f.type === 'exp' && f.acc === cardId && (+f.inst || 1) > 1 && f.start).forEach((f) => {
+      const s0 = parse(f.start);
+      for (let i = 0; i < 1200; i++) {
+        const d = mkDate(s0.getFullYear(), s0.getMonth() + i, +f.day || s0.getDate());
+        if (d > t || (f.end && d > f.end)) break;
+        if (d >= f.start) fx.push({ ...f, date: d, fxId: f.id });
+      }
+    });
+    return [...S.gbTx.filter((x) => x.type === 'exp' && x.acc === cardId && (+x.inst || 1) > 1), ...fx].map((x) => {
       const n = +x.inst, per = Math.floor(x.amount / n), d0 = parse(x.date);
       let paid = 0, k = 0;
       for (let i = 0; i < n; i++) { if (mkDate(d0.getFullYear(), d0.getMonth() + i, d0.getDate()) <= t) { k = i + 1; paid += i === n - 1 ? x.amount - per * (n - 1) : per; } }
@@ -294,7 +307,7 @@ export function setupGb(X) {
     const t = todayStr();
     const act = S.gbFixed.filter((f) => !f.end || f.end >= t), ended = S.gbFixed.filter((f) => f.end && f.end < t);
     const row = (f) => {
-      const s = f.type === 'tr' ? `매월 ${f.day}일 · ${f.asExp ? esc(catName('exp', f.cat, f.sub)) + ' · ' : ''}${esc(accName(f.acc))} → ${esc(accName(f.to))}` : `매월 ${f.day}일 · ${esc(catName('exp', f.cat, f.sub))} · ${esc(accName(f.acc))}`;
+      const s = f.type === 'tr' ? `매월 ${f.day}일 · ${f.asExp ? esc(catName('exp', f.cat, f.sub)) + ' · ' : ''}${esc(accName(f.acc))} → ${esc(accName(f.to))}` : `매월 ${f.day}일 · ${esc(catName('exp', f.cat, f.sub))} · ${esc(accName(f.acc))}${(+f.inst || 1) > 1 && accOf(f.acc)?.type === 'card' ? ` · ${f.inst}개월 할부` : ''}`;
       return `<button class="gtx" data-act="gFxOpen" data-id="${f.id}"><span class="sw" style="background:${f.type === 'tr' && !f.asExp ? '#8A8A8A' : colorOfE(f)}"></span><span class="t">${esc(f.title || '')}<small>${s}</small></span><span class="a">${won(amtE(f))}<small>${f.start.slice(0, 7).replace('-', '.')} – ${f.end ? f.end.slice(0, 7).replace('-', '.') : ''}</small></span></button>`;
     };
     const ex = act.filter((f) => f.type === 'exp'), tr = act.filter((f) => f.type === 'tr');
@@ -323,7 +336,7 @@ export function setupGb(X) {
     h += `<div class="gsec"><span>신용카드</span><small class="${cs ? 'gout' : ''}">${won(cs)}</small></div>`;
     card.forEach((a) => {
       h += arow(a);
-      h += installs(a.id).map((r) => `<button class="gins" data-act="gTxOpen" data-id="${r.x.id}"><span>${esc(r.x.title || '할부')} · ${r.n}개월 중 ${r.k}회</span><span>${won(r.paid)} / ${won(r.remain)}</span></button>`).join('');
+      h += installs(a.id).map((r) => `<button class="gins" data-act="${r.x.fxId ? 'gFxOpen' : 'gTxOpen'}" data-id="${r.x.id}"><span>${esc(r.x.title || '할부')} · ${r.n}개월 중 ${r.k}회</span><span>${won(r.paid)} / ${won(r.remain)}</span></button>`).join('');
     });
     if (!card.length) h += '<p class="empty" style="padding:10px 2px">없음</p>';
     return h + '</div>';
@@ -506,6 +519,12 @@ export function setupGb(X) {
     if (!q.trim()) return `<div class="gsugc">${l.map((t, i) => `<button data-act="gSug" data-i="${i}">${esc(t.title)}</button>`).join('')}</div>`;
     return `<div class="gsugl">${l.map((t, i) => `<button data-act="gSug" data-i="${i}"><span>${esc(t.title)}<small>${t.type === 'tr' ? `${esc(accName(t.acc))} → ${esc(accName(t.to))}` : `${esc(catName(t.type, t.cat, t.sub))} · ${esc(accName(t.acc))}`}</small></span><b>${won(t.amount)}</b></button>`).join('')}</div>`;
   }
+  // 고정 지출 할부: 카드일 때만 고를 수 있고, 기본은 해당없음
+  const instSel = (d) => {
+    const card = accOf(d.acc)?.type === 'card';
+    const opts = [['1', '해당없음'], ...(card ? [2, 3, 4, 5, 6, 10, 12, 18, 24].map((n) => [String(n), `${n}개월`]) : [])];
+    return `<div class="gfld"><label class="lb" for="g_inst">할부</label><select id="g_inst" data-gf="inst" ${card ? '' : 'disabled'}>${opts.map(([v, l]) => opt(v, l, String(card ? +d.inst || 1 : 1))).join('')}</select></div>`;
+  };
   const feeInp = (d) => `<div class="gfld"><label class="lb" for="g_fee">수수료</label><input id="g_fee" data-gf="fee" inputmode="numeric" autocomplete="off" value="${+d.fee ? commas(d.fee) : ''}"></div>`;
   const ynHtml = (d) => `<div class="gfld gyn"><span>지출로 잡기</span>${seg([['n', '아니요'], ['y', '예']], d.asExp ? 'y' : 'n', 'gAsExp')}</div>`;
   function txHtml() {
@@ -539,7 +558,7 @@ export function setupGb(X) {
     const daySel = sel('반복', 'day', Array.from({ length: 31 }, (_, i) => [String(i + 1), `매월 ${i + 1}일`]), String(d.day));
     // 왼쪽 줄: 보내는 통장(결제 방법) - 대분류 - 반복 - 시작일 - 지출로 잡기
     if (d.type === 'tr') h += `<div class="two">${sel('보내는 통장', 'acc', accOpts(['bank', 'saving']), d.acc, '고르기')}${sel('받는 통장', 'to', accOpts(['bank', 'saving']), d.to, '고르기')}</div>`;
-    else h += `<div class="two">${sel('결제 방법', 'acc', accOpts(['bank', 'saving', 'card']), d.acc, '고르기')}<div></div></div>`;
+    else h += `<div class="two">${sel('결제 방법', 'acc', accOpts(['bank', 'saving', 'card']), d.acc, '고르기')}${instSel(d)}</div>`;
     h += catSel('exp', d);
     h += `<div class="two">${daySel}${d.type === 'tr' ? feeInp(d) : '<div></div>'}</div>`;
     h += `<div class="two">${inp('시작일', 'start', d.start, 'date')}${inp('종료일', 'end', d.end, 'date')}</div>`;
@@ -713,6 +732,7 @@ export function setupGb(X) {
       if (!d.acc) { sh.err = '통장을 골라 주세요.'; render(); return; }
       if (d.type === 'tr' && (!d.to || d.to === d.acc)) { sh.err = '받는 통장을 골라 주세요.'; render(); return; }
       if ((d.type === 'exp' || d.asExp) && !d.cat) { sh.err = '대분류를 골라 주세요.'; render(); return; }
+      d.inst = d.type === 'exp' && accOf(d.acc)?.type === 'card' ? Math.max(1, +d.inst || 1) : 1;
       if (d.type !== 'tr') { delete d.fee; delete d.asExp; } else { d.fee = +d.fee || 0; d.asExp = !!d.asExp; }
       if (!d.start) { sh.err = '시작일을 골라 주세요.'; render(); return; }
       if (d.end && d.end < d.start) { sh.err = '종료일이 시작일보다 빨라요.'; render(); return; }

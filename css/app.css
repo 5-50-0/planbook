@@ -597,3 +597,4 @@ html.dark .sitem.lift{box-shadow:0 6px 18px rgba(255,255,255,.25)}
 .gdate input{color:transparent}
 .gdate input::-webkit-datetime-edit{opacity:0}
 .gdate span{position:absolute;left:13px;top:50%;transform:translateY(-50%);pointer-events:none;font-size:15px;font-variant-numeric:tabular-nums}
+.gct{table-layout:fixed}.gct th:nth-child(2){width:80px}.gct th:nth-child(3){width:106px}.gct td.p{width:auto}.gct td.v{width:auto}.gct td:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

@@ -1542,7 +1542,7 @@ $app.addEventListener('contextmenu', (e) => { if (e.target.closest && e.target.c
 
 const G = setupGb({ S, render, openSheet, closeSheet, toast, save, U, D, esc, uid, band, seg, errLine, armDel, wide, IC,
   HOLIDAYS, parse, ymd, addDays, todayStr, WD, EN_MONTH, monthWeeks, textOn, PALETTE, writeXlsx, stampName,
-  backupCurrent, commas, wonOf, fmtMD, dayClass, clone, small });
+  backupCurrent, commas, wonOf, fmtMD, dayClass, clone, small, downloadBlob, APP_VERSION });
 const ACT = {
   ...G.ACT,
   modePop: () => { S.modePop = true; render(); },

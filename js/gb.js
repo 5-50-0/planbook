@@ -5,7 +5,7 @@ export const GB_COLS = ['gbTx', 'gbFixed', 'gbConf'];
 export function setupGb(X) {
   const { S, render, openSheet, closeSheet, toast, save, U, D, esc, uid, band, seg, errLine, armDel, wide, IC,
     HOLIDAYS, parse, ymd, addDays, todayStr, WD, EN_MONTH, monthWeeks, textOn, PALETTE, writeXlsx, stampName,
-    backupCurrent, commas, wonOf, fmtMD, dayClass, clone, small } = X;
+    backupCurrent, commas, wonOf, fmtMD, dayClass, clone, small, downloadBlob, APP_VERSION } = X;
 
   const won = (n) => Number(n || 0).toLocaleString('ko-KR');
   const sgn = (n) => (n > 0 ? '+' : '') + won(n);
@@ -386,6 +386,14 @@ export function setupGb(X) {
         h += `<button class="row" data-act="gCatNew" data-k="${k}" style="font-size:14px">${small(IC.plus)}분류 추가</button>`;
       }
     });
+    h += acc('data', '데이터');
+    if (A.data) {
+      h += '<button class="row" data-act="gExportJson">머니북 백업 파일 받기<span class="vl">.json</span></button>';
+      h += '<button class="row" data-act="importJson">백업 파일로 복원</button>';
+      h += '<button class="row" data-act="backups">자동 백업 목록</button>';
+      h += '<button class="row" data-act="ckOpen">데이터 점검</button>';
+      h += '<input type="file" id="imp" accept=".json,application/json" hidden>';
+    }
     h += acc('etc', '잠금 · 내보내기');
     if (A.etc) {
       h += `<button class="row" data-act="pinSet">잠금 비밀번호<span class="vl">${S.settings.recPin ? '설정됨' : '없음'}</span></button>`;
@@ -676,6 +684,13 @@ export function setupGb(X) {
       c[sh.k] = c[sh.k].filter((x) => x.id !== d.id);
       if (c.budget) { delete c.budget[d.id]; (d.subs || []).forEach((s) => delete c.budget[s.id]); }
       saveConf(c); closeSheet(); toast('옮기고 지웠어요');
+    },
+    // 머니북 자료만 담은 백업 파일 (플랜북 설정의 백업 파일에도 함께 들어 있음)
+    gExportJson: () => {
+      const out = { app: 'planbook', part: 'moneybook', ver: APP_VERSION, at: new Date().toISOString() };
+      ['items', 'notes', 'records', 'routines', 'yb', 'projects'].forEach((c) => { out[c] = []; });
+      out.gbTx = S.gbTx; out.gbFixed = S.gbFixed; out.gbConf = S.gbConf;
+      downloadBlob(`플랜북_머니북_백업_${stampName()}.json`, new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' }));
     },
     gUnlock: () => openSheet({ kind: 'pin', mode: 'open', v: '', then: 'gb' }),
     gXlsx: () => { const y = S.gbYear; openSheet({ kind: 'gxlsx', from: `${y}-01-01`, to: `${y}-12-31` }); },

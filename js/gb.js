@@ -58,7 +58,7 @@ export function setupGb(X) {
   const amtE = (e) => (e.type === 'tr' ? (e.amount || 0) + (+e.fee || 0) : e.amount || 0);
   const colorOfE = (e) => (e.type === 'tr' ? (e.asExp ? catOf('exp', e.cat)?.color || '#D9D9D9' : '#D9D9D9') : catOf(e.type, e.cat)?.color || '#CFCFCF');
   const accName = (id) => accOf(id)?.name || '통장 없음';
-  const ACC_COL = { bank: '#111111', saving: '#8A8A8A', card: '#C0392B' };
+  const ACC_COL = { bank: '#111111', saving: '#8A8A8A', card: '#C0392B', loan: '#6B3FA0' };
   const accColor = (a) => a.color || ACC_COL[a.type] || '#111111';
 
   // ---------- 월급일 · 예산 기간 ----------
@@ -128,6 +128,7 @@ export function setupGb(X) {
   // ---------- 잔액 ----------
   function balance(a, upto = todayStr()) {
     if (a.type === 'card') return -cardRemain(a.id);
+    if (a.type === 'loan') return -(a.init || 0); // 대출: 남은 금액만 적어 둠
     const from = a.initDate || '0000-01-01';
     const l = entries(from, upto);
     let b = (a.init || 0) + (a.adj || 0);
@@ -321,14 +322,14 @@ export function setupGb(X) {
   // ---------- 자산 ----------
   function assetPage() {
     const A = accs();
-    const bank = A.filter((a) => a.type === 'bank'), sav = A.filter((a) => a.type === 'saving'), card = A.filter((a) => a.type === 'card');
-    const bs = sum(bank, balance), ss = sum(sav, balance), cs = sum(card, balance);
-    const net = bs + ss + cs;
-    const tot = Math.abs(bs) + Math.abs(ss) + Math.abs(cs) || 1;
+    const bank = A.filter((a) => a.type === 'bank'), sav = A.filter((a) => a.type === 'saving'), card = A.filter((a) => a.type === 'card'), loan = A.filter((a) => a.type === 'loan');
+    const bs = sum(bank, balance), ss = sum(sav, balance), cs = sum(card, balance), ls = sum(loan, balance);
+    const net = bs + ss + cs + ls;
+    const tot = Math.abs(bs) + Math.abs(ss) + Math.abs(cs) + Math.abs(ls) || 1;
     let h = headWord('에셋북', '', tools('', '', `<button class="ico ${wide() ? 'bd' : ''}" aria-label="통장 추가" data-act="gAccNew">${IC.plus}</button>`));
     h += `<div class="gpad gbot"><div class="gnet"><small>순자산</small><b>${won(net)}</b></div>`;
-    h += `<div class="gstk"><i style="flex:${Math.abs(bs) / tot};background:#111"></i><i style="flex:${Math.abs(ss) / tot};background:#8A8A8A"></i><i style="flex:${Math.abs(cs) / tot};background:#C0392B"></i></div>`;
-    h += '<div class="glg"><span><i style="background:#111"></i>통장</span><span><i style="background:#8A8A8A"></i>저축</span><span><i style="background:#C0392B"></i>신용카드</span></div>';
+    h += `<div class="gstk"><i style="flex:${Math.abs(bs) / tot};background:#111"></i><i style="flex:${Math.abs(ss) / tot};background:#8A8A8A"></i><i style="flex:${Math.abs(cs) / tot};background:#C0392B"></i><i style="flex:${Math.abs(ls) / tot};background:#6B3FA0"></i></div>`;
+    h += `<div class="glg"><span><i style="background:#111"></i>통장</span><span><i style="background:#8A8A8A"></i>저축</span><span><i style="background:#C0392B"></i>신용카드</span>${loan.length ? '<span><i style="background:#6B3FA0"></i>대출</span>' : ''}</div>`;
     const arow = (a, sub = '') => `<button class="gac" data-act="gAccOpen" data-id="${a.id}"><span class="sw" style="background:${accColor(a)}"></span><span class="t">${esc(a.name)}${sub ? `<small>${sub}</small>` : ''}</span><span class="v">${a.type === 'card' ? '<small class="mut">낸 금액 / 남은 금액</small>' : won(balance(a))}</span></button>`;
     const fxIn = (a) => { const f = S.gbFixed.find((x) => x.type === 'tr' && x.to === a.id && (!x.end || x.end >= todayStr())); return f ? `매월 ${f.day}일 · ${won(f.amount)}` : ''; };
     h += `<div class="gsec"><span>통장</span><small>${won(bs)}</small></div>${bank.map((a) => arow(a)).join('') || '<p class="empty" style="padding:10px 2px">없음</p>'}`;
@@ -339,6 +340,10 @@ export function setupGb(X) {
       h += installs(a.id).map((r) => `<button class="gins" data-act="${r.x.fxId ? 'gFxOpen' : 'gTxOpen'}" data-id="${r.x.id}"><span>${esc(r.x.title || '할부')} · ${r.n}개월 중 ${r.k}회</span><span>${won(r.paid)} / ${won(r.remain)}</span></button>`).join('');
     });
     if (!card.length) h += '<p class="empty" style="padding:10px 2px">없음</p>';
+    if (loan.length) {
+      const lsub = (a) => [a.bank, a.rate ? `금리 ${a.rate}%` : '', a.lto ? `만기 ${a.lto}` : ''].filter(Boolean).map(esc).join(' · ');
+      h += `<div class="gsec"><span>대출</span><small class="gout">${won(ls)}</small></div>${loan.map((a) => arow(a, lsub(a))).join('')}`;
+    }
     return h + '</div>';
   }
 
@@ -423,8 +428,8 @@ export function setupGb(X) {
     }
     h += acc('acc', '통장 · 카드');
     if (A.acc) {
-      const T = { bank: '통장', saving: '저축', card: '신용카드' };
-      ['bank', 'saving', 'card'].forEach((t) => {
+      const T = { bank: '통장', saving: '저축', card: '신용카드', loan: '대출' };
+      ['bank', 'saving', 'card', 'loan'].forEach((t) => {
         const l = conf().accounts.filter((a) => a.type === t);
         if (!l.length) return;
         h += `<div class="sorthd"><span>${T[t]}</span></div>`;
@@ -611,9 +616,13 @@ export function setupGb(X) {
     const sh = S.sheet, a = sh.draft;
     const col = a.color || ACC_COL[a.type];
     let h = `<div class="band in" style="background:${col};color:${textOn(col)}"><input id="g_name" data-gf="name" value="${esc(a.name || '')}" autocomplete="off" style="color:inherit"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div><div class="gform">`;
-    h += seg([['bank', '통장'], ['saving', '저축'], ['card', '신용카드']], a.type, 'gAccType');
+    h += seg([['bank', '통장'], ['saving', '저축'], ['card', '신용카드'], ['loan', '대출']], a.type, 'gAccType');
     h += colField(sh, col);
-    if (a.type !== 'card') h += `<div class="gfld"><label class="lb" for="g_bal">현재 잔액</label><input id="g_bal" data-gf="bal" inputmode="numeric" value="${a.bal != null ? commas(a.bal) : ''}"></div>`;
+    if (a.type !== 'card') h += `<div class="gfld"><label class="lb" for="g_bal">${a.type === 'loan' ? '남은 금액' : '현재 잔액'}</label><input id="g_bal" data-gf="bal" inputmode="numeric" value="${a.bal != null ? commas(a.bal) : ''}"></div>`;
+    if (a.type === 'loan') {
+      h += `<div class="two">${inp('은행', 'bank', a.bank)}${inp('금리 (%)', 'rate', a.rate, 'text', 'inputmode="decimal"')}</div>`;
+      h += `<div class="two">${inp('대출일', 'lfrom', a.lfrom, 'date')}${inp('만기일', 'lto', a.lto, 'date')}</div>`;
+    }
     if (!sh.isNew) {
       const n = refCount('acc', a.id);
       if (sh.delMode) {
@@ -693,7 +702,7 @@ export function setupGb(X) {
     gNew: (el) => { if (!guardAcc()) return; ensureConf(); const sh = { kind: 'gtx', isNew: true, draft: newTx(el?.dataset?.d || (S.gbView === 'book' && wide() ? S.gbSel : todayStr())) }; if (S.sheet) { S.sheet = sh; render(); } else openSheet(sh); },
     gFab: () => ACT.gNew(null),
     gTxOpen: (el) => { const t = S.gbTx.find((x) => x.id === el.dataset.id); if (!t) return; const sh = { kind: 'gtx', isNew: false, draft: { inst: 1, ...clone(t) } }; if (S.sheet) { S.sheet = sh; S.delArm = false; render(); } else openSheet(sh); },
-    gTxType: (el) => { const d = S.sheet.draft; d.type = el.dataset.v; d.cat = ''; d.sub = ''; if (d.type !== 'exp') d.inst = 1; if (d.type !== 'exp' && accOf(d.acc)?.type === 'card') d.acc = accs().find((a) => a.type !== 'card')?.id || ''; render(); },
+    gTxType: (el) => { const d = S.sheet.draft; d.type = el.dataset.v; d.cat = ''; d.sub = ''; if (d.type !== 'exp') d.inst = 1; if (d.type !== 'exp' && accOf(d.acc)?.type === 'card') d.acc = accs().find((a) => a.type === 'bank' || a.type === 'saving')?.id || ''; render(); },
     gSug: (el) => {
       const sh = S.sheet, t = (sh.sug || [])[+el.dataset.i];
       if (!t) return;
@@ -723,7 +732,7 @@ export function setupGb(X) {
     gTxDel: () => { if (!armDel()) return; D.deleteDocIn(U(), 'gbTx', S.sheet.draft.id); closeSheet(); },
     gFxNew: () => { if (!guardAcc()) return; ensureConf(); openSheet({ kind: 'gfx', isNew: true, draft: { id: uid(), type: 'exp', title: '', amount: 0, day: 25, start: todayStr(), end: '', acc: accs()[0]?.id || '', to: '', cat: '', sub: '', memo: '', created: Date.now() } }); },
     gFxOpen: (el) => { const f = S.gbFixed.find((x) => x.id === el.dataset.id); if (!f) return; const sh = { kind: 'gfx', isNew: false, draft: clone(f) }; if (S.sheet) { S.sheet = sh; S.delArm = false; render(); } else openSheet(sh); },
-    gFxType: (el) => { const d = S.sheet.draft; d.type = el.dataset.v; d.cat = ''; d.sub = ''; if (d.type === 'tr' && accOf(d.acc)?.type === 'card') d.acc = accs().find((a) => a.type !== 'card')?.id || ''; render(); },
+    gFxType: (el) => { const d = S.sheet.draft; d.type = el.dataset.v; d.cat = ''; d.sub = ''; if (d.type === 'tr' && accOf(d.acc)?.type === 'card') d.acc = accs().find((a) => a.type === 'bank' || a.type === 'saving')?.id || ''; render(); },
     gFxSave: () => {
       const sh = S.sheet, d = { ...sh.draft };
       d.title = (d.title || '').trim();
@@ -785,18 +794,20 @@ export function setupGb(X) {
     },
     gAcc: (el) => { S.gbAcc[el.dataset.v] = !S.gbAcc[el.dataset.v]; render(); },
     gAccNew: () => { ensureConf(); openSheet({ kind: 'gacc', isNew: true, draft: { id: uid(), name: '', type: 'bank', bal: 0 } }); },
-    gAccOpen: (el) => { const a = accOf(el.dataset.id); if (!a) return; openSheet({ kind: 'gacc', isNew: false, draft: { ...clone(a), bal: a.type === 'card' ? 0 : balance(a) } }); },
+    gAccOpen: (el) => { const a = accOf(el.dataset.id); if (!a) return; openSheet({ kind: 'gacc', isNew: false, draft: { ...clone(a), bal: a.type === 'card' ? 0 : a.type === 'loan' ? a.init || 0 : balance(a) } }); },
     gAccType: (el) => { const d = S.sheet.draft; if (!d.color || Object.values(ACC_COL).includes(d.color)) d.color = ACC_COL[el.dataset.v]; d.type = el.dataset.v; render(); },
     gAccSave: () => {
       const sh = S.sheet, d = sh.draft;
       const name = (d.name || '').trim();
       if (!name) { sh.err = '이름을 입력해 주세요.'; render(); return; }
       const c = clone(conf());
-      if (sh.isNew) c.accounts.push({ id: d.id, name, type: d.type, color: d.color || ACC_COL[d.type], init: d.type === 'card' ? 0 : d.bal || 0, initDate: todayStr(), adj: 0 });
+      const loanF = d.type === 'loan' ? { bank: (d.bank || '').trim(), rate: (d.rate || '').toString().trim(), lfrom: d.lfrom || '', lto: d.lto || '' } : {};
+      if (sh.isNew) c.accounts.push({ id: d.id, name, type: d.type, color: d.color || ACC_COL[d.type], init: d.type === 'card' ? 0 : d.bal || 0, initDate: todayStr(), adj: 0, ...loanF });
       else {
         const a = c.accounts.find((x) => x.id === d.id); if (!a) return closeSheet();
         a.name = name; a.type = d.type; if (d.color) a.color = d.color;
-        if (d.type !== 'card') { const cur = balance({ ...a, adj: 0 }); a.adj = (d.bal || 0) - cur; }
+        if (d.type === 'loan') { a.init = d.bal || 0; a.adj = 0; Object.assign(a, loanF); }
+        else if (d.type !== 'card') { const cur = balance({ ...a, adj: 0 }); a.adj = (d.bal || 0) - cur; }
       }
       if (!saveConf(c)) { sh.err = FAIL; render(); return; }
       closeSheet();

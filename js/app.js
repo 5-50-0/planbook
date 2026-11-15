@@ -8,7 +8,7 @@ import { occItems, occDates, nextOcc, ruleText, lunarToSolar } from './routine.j
 import { writeXlsx, buildIcs, downloadBlob, stampName } from './export.js';
 import { setupGb } from './gb.js';
 
-export const APP_VERSION = '1.6.3';
+export const APP_VERSION = '1.6.4';
 
 const NI = {
   month: '<rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M8 2.5v4M16 2.5v4"/><circle cx="8" cy="14" r=".6"/><circle cx="12" cy="14" r=".6"/><circle cx="16" cy="14" r=".6"/><circle cx="8" cy="17.3" r=".6"/><circle cx="12" cy="17.3" r=".6"/>',

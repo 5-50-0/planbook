@@ -446,11 +446,17 @@ html.dark .sitem.lift{box-shadow:0 6px 18px rgba(255,255,255,.25)}
 .gcell .n>span{display:inline-block;min-width:20px}
 .gcell.today .n>span{background:#111;color:#fff;text-align:center;font-weight:500;margin-left:-5px;margin-top:-3px;padding:0 0 0}
 .gcell .n i{font-style:normal;font-size:9px;line-height:13px;background:#111;color:#fff;padding:0 3px}
-.gcell .v{font-size:10.5px;line-height:15px;white-space:nowrap}
-.gcell .v.sm{font-size:9px;letter-spacing:-.3px}
+.gcell .li{display:flex;width:100%;min-width:0;overflow:hidden;white-space:nowrap;font-size:10px;line-height:14px;letter-spacing:-.3px}
+.gcell .li s{text-decoration:none;color:#C0392B;margin-left:auto}.gcell .li.i s{color:#1F4FB8}
+.gcell .li em{font-style:normal;color:#6B6B6B;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;margin-right:4px}.gcell .li s{flex:none}
+.gcell .li.sm{font-size:8.5px;letter-spacing:-.5px}
+.gcell .more{font-size:9.5px;line-height:13px;color:#8A8A8A}
+.gcell.fut .li,.gcell.fut .more{opacity:.38}
 .wide .gcell{font-size:14px;line-height:22px;padding:4px 6px 4px 8px}
-.wide .gcell .v{font-size:12.5px;line-height:18px}
-.wide .gcell .v.sm{font-size:11.5px}
+.wide .gcell .li{font-size:12px;line-height:19px;letter-spacing:-.2px}
+.wide .gcell{container-type:inline-size}
+@container (max-width:119px){.gcell .li em{display:none}.gcell .li s{margin-left:auto}}
+.wide .gcell .n{margin-bottom:3px}.wide .gcell .more{font-size:12px;line-height:18px}
 .wide .gcell.today .n>span{margin-left:-8px;min-width:26px}
 .gdh{display:flex;justify-content:space-between;font-size:12.5px;padding:12px 2px 6px;border-bottom:1.5px solid #111;font-variant-numeric:tabular-nums}
 .gdh b{font-weight:500}

@@ -54,6 +54,8 @@ export function setupGb(X) {
   const catName = (kind, cid, sid) => { const c = catOf(kind, cid); if (!c) return '분류 없음'; const s = sid && (c.subs || []).find((x) => x.id === sid); return s ? `${c.name} › ${s.name}` : c.name; };
   const colorOfE = (e) => (e.type === 'tr' ? '#D9D9D9' : catOf(e.type, e.cat)?.color || '#CFCFCF');
   const accName = (id) => accOf(id)?.name || '통장 없음';
+  const ACC_COL = { bank: '#111111', saving: '#8A8A8A', card: '#C0392B' };
+  const accColor = (a) => a.color || ACC_COL[a.type] || '#111111';
 
   // ---------- 월급일 · 예산 기간 ----------
   const isOff = (d) => { const w = parse(d).getDay(); return w === 0 || w === 6 || !!HOLIDAYS[d]; };
@@ -61,6 +63,18 @@ export function setupGb(X) {
     let d = mkDate(y, m, conf().payday || 25);
     while (isOff(d)) d = addDays(d, -1);
     return d;
+  }
+  // 이름이 y년 m월인 기간: 전월 월급일 ~ 이번 달 월급일 전날
+  function periodOf(y, m) {
+    const pm = m === 0 ? 11 : m - 1, py = m === 0 ? y - 1 : y;
+    return { y, m, start: payDate(py, pm), end: addDays(payDate(y, m), -1) };
+  }
+  // 오늘이 들어 있는 기간의 이름
+  function curLabel() {
+    const t = todayStr(), tt = parse(t);
+    let y = tt.getFullYear(), m = tt.getMonth();
+    if (t >= payDate(y, m)) { m++; if (m > 11) { m = 0; y++; } }
+    return [y, m];
   }
   // off = 0이면 오늘이 들어 있는 기간. 기간 이름은 끝나는 달
   function period(off = 0) {
@@ -165,7 +179,8 @@ export function setupGb(X) {
     }
     const from = ymd(new Date(y, m, 1)), to = ymd(new Date(y, m + 1, 0));
     const l = entries(from, to);
-    let h = headMonth(y, m, tools('gMPrev', 'gMNext')) + tabs([['day', '일일'], ['cal', '달력'], ['mon', '월별']], tab, 'gTab') + (tab === 'cal' ? '<div style="height:8px"></div>' : sumBar(incOf(l), expOf(l)));
+    const PP = periodOf(y, m);
+    let h = (tab === 'cal' ? `<div class="head"><div class="big"><h1>${m + 1}</h1><div class="sub"><p class="y">${y}</p><p class="m">${md(PP.start)} – ${md(PP.end)}</p></div></div>${tools('gMPrev', 'gMNext')}</div>` : headMonth(y, m, tools('gMPrev', 'gMNext'))) + tabs([['day', '일일'], ['cal', '달력'], ['mon', '월별']], tab, 'gTab') + (tab === 'cal' ? '<div style="height:8px"></div>' : sumBar(incOf(l), expOf(l)));
     if (tab === 'day') {
       const by = new Map();
       l.filter((e) => e.date <= todayStr() || e.src === 'tx').sort(sortE).forEach((e) => { if (!by.has(e.date)) by.set(e.date, []); by.get(e.date).push(e); });
@@ -174,9 +189,11 @@ export function setupGb(X) {
       by.forEach((list, d) => { h += `<div class="gdh"><b class="${dayClass(d)}">${+d.slice(8)}일 ${WD[parse(d).getDay()]}요일</b>${dayTotal(list)}</div>${list.map(txRow).join('')}`; });
       return h + '</div>';
     }
-    // 달력
-    const weeks = monthWeeks(y, m), today = todayStr(), W = wide();
-    const pays = new Set([payDate(y, m)]);
+    // 달력: 전월 월급일 ~ 이번 달 월급일 전날
+    const P = periodOf(y, m), today = todayStr(), W = wide();
+    const weeks = [];
+    for (let ws = addDays(P.start, -parse(P.start).getDay()); ws <= P.end; ws = addDays(ws, 7)) weeks.push(Array.from({ length: 7 }, (_, i) => addDays(ws, i)));
+    const pays = new Set([P.start, payDate(y, m)]);
     const all = entries(weeks[0][0], weeks[weeks.length - 1][6]);
     const byD = new Map(); all.forEach((e) => { if (!byD.has(e.date)) byD.set(e.date, []); byD.get(e.date).push(e); });
     h += `<div class="gcal"><div class="gwd">${WD.map((w, i) => `<span class="${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}">${w}</span>`).join('')}</div>`;
@@ -185,10 +202,11 @@ export function setupGb(X) {
       days.forEach((d) => {
         const dl = byD.get(d) || [];
         const a = incOf(dl), b = expOf(dl);
-        const other = parse(d).getMonth() !== m;
+        const other = d < P.start || d > P.end;
         const cls = ['gcell', dayClass(d), other ? 'other' : '', d === today ? 'today' : '', W && d === S.gbSel ? 'sel' : ''].join(' ');
         const big = (v) => (v >= 1000000 ? ' sm' : '');
-        h += `<button class="${cls}" data-act="gAddOn" data-d="${d}"><span class="n"><span data-act="gSelDay" data-d="${d}" role="button">${parse(d).getDate()}</span>${pays.has(d) ? '<i>월급</i>' : ''}</span>${!other && a ? `<span class="v gin${big(a)}">${won(a)}</span>` : ''}${!other && b ? `<span class="v gout${big(b)}">${won(b)}</span>` : ''}</button>`;
+        const dn = parse(d).getDate() === 1 ? `${parse(d).getMonth() + 1}.1` : parse(d).getDate();
+        h += `<button class="${cls}" data-act="gAddOn" data-d="${d}"><span class="n"><span data-act="gSelDay" data-d="${d}" role="button">${dn}</span>${pays.has(d) ? '<i>월급</i>' : ''}</span>${!other && a ? `<span class="v gin${big(a)}">${won(a)}</span>` : ''}${!other && b ? `<span class="v gout${big(b)}">${won(b)}</span>` : ''}</button>`;
       });
       h += '</div>';
     });
@@ -255,7 +273,7 @@ export function setupGb(X) {
     h += `<div class="gpad gbot"><div class="gnet"><small>순자산</small><b>${won(net)}</b></div>`;
     h += `<div class="gstk"><i style="flex:${Math.abs(bs) / tot};background:#111"></i><i style="flex:${Math.abs(ss) / tot};background:#8A8A8A"></i><i style="flex:${Math.abs(cs) / tot};background:#C0392B"></i></div>`;
     h += '<div class="glg"><span><i style="background:#111"></i>통장</span><span><i style="background:#8A8A8A"></i>저축</span><span><i style="background:#C0392B"></i>신용카드</span></div>';
-    const arow = (a, sub = '') => `<button class="gac" data-act="gAccOpen" data-id="${a.id}"><span class="sw" style="background:${a.type === 'bank' ? '#111' : a.type === 'saving' ? '#8A8A8A' : '#C0392B'}"></span><span class="t">${esc(a.name)}${sub ? `<small>${sub}</small>` : ''}</span><span class="v">${a.type === 'card' ? '<small class="mut">낸 금액 / 남은 금액</small>' : won(balance(a))}</span></button>`;
+    const arow = (a, sub = '') => `<button class="gac" data-act="gAccOpen" data-id="${a.id}"><span class="sw" style="background:${accColor(a)}"></span><span class="t">${esc(a.name)}${sub ? `<small>${sub}</small>` : ''}</span><span class="v">${a.type === 'card' ? '<small class="mut">낸 금액 / 남은 금액</small>' : won(balance(a))}</span></button>`;
     const fxIn = (a) => { const f = S.gbFixed.find((x) => x.type === 'tr' && x.to === a.id && (!x.end || x.end >= todayStr())); return f ? `매월 ${f.day}일 · ${won(f.amount)}` : ''; };
     h += `<div class="gsec"><span>통장</span><small>${won(bs)}</small></div>${bank.map((a) => arow(a)).join('') || '<p class="empty" style="padding:10px 2px">없음</p>'}`;
     h += `<div class="gsec"><span>저축</span><small>${won(ss)}</small></div>${sav.map((a) => arow(a, fxIn(a))).join('') || '<p class="empty" style="padding:10px 2px">없음</p>'}`;
@@ -353,7 +371,7 @@ export function setupGb(X) {
         const l = conf().accounts.filter((a) => a.type === t);
         if (!l.length) return;
         h += `<div class="sorthd"><span>${T[t]}</span></div>`;
-        h += l.map((a) => `<button class="row" data-act="gAccOpen" data-id="${a.id}">${esc(a.name)}<span class="vl">${a.closed ? '보관됨' : t === 'card' ? '' : won(balance(a))}</span></button>`).join('');
+        h += l.map((a) => `<button class="row" data-act="gAccOpen" data-id="${a.id}"><span class="sw" style="background:${accColor(a)}"></span>${esc(a.name)}<span class="vl">${a.closed ? '보관됨' : t === 'card' ? '' : won(balance(a))}</span></button>`).join('');
       });
       h += `<button class="row" data-act="gAccNew" style="font-size:14px">${small(IC.plus)}통장 · 카드 추가</button>`;
     }
@@ -361,8 +379,9 @@ export function setupGb(X) {
       h += acc(k, l);
       if (A[k]) {
         catList(k).forEach((ct) => {
-          h += `<button class="row" data-act="gCatOpen" data-k="${k}" data-id="${ct.id}"><span class="sw" style="background:${ct.color}"></span>${esc(ct.name)}<span class="vl">${(ct.subs || []).length ? `소분류 ${ct.subs.length}` : ''}</span></button>`;
-          (ct.subs || []).forEach((s) => { h += `<button class="row sub" data-act="gCatOpen" data-k="${k}" data-id="${ct.id}"><span class="sw" style="background:${ct.color}"></span>${esc(s.name)}</button>`; });
+          const n = (ct.subs || []).length, open = S.gbCatOpen.has(ct.id);
+          h += `<div class="gcatrow"><button class="row" data-act="gCatOpen" data-k="${k}" data-id="${ct.id}"><span class="sw" style="background:${ct.color}"></span>${esc(ct.name)}</button><button class="gfold" data-act="gCatFold" data-v="${ct.id}" ${n ? '' : 'disabled'} aria-label="소분류 펼치기">${n ? `소분류 ${n} <b>${open ? '−' : '+'}</b>` : ''}</button></div>`;
+          if (open) (ct.subs || []).forEach((s) => { h += `<button class="row sub" data-act="gCatOpen" data-k="${k}" data-id="${ct.id}"><span class="sw" style="background:${ct.color}"></span>${esc(s.name)}</button>`; });
         });
         h += `<button class="row" data-act="gCatNew" data-k="${k}" style="font-size:14px">${small(IC.plus)}분류 추가</button>`;
       }
@@ -455,8 +474,10 @@ export function setupGb(X) {
   }
   function accHtml() {
     const sh = S.sheet, a = sh.draft;
-    let h = `<div class="band in" style="background:#111;color:#fff"><input id="g_name" data-gf="name" value="${esc(a.name || '')}" placeholder="이름" autocomplete="off" style="color:inherit"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div><div class="gform">`;
+    const col = a.color || ACC_COL[a.type];
+    let h = `<div class="band in" style="background:${col};color:${textOn(col)}"><input id="g_name" data-gf="name" value="${esc(a.name || '')}" placeholder="이름" autocomplete="off" style="color:inherit"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div><div class="gform">`;
     h += seg([['bank', '통장'], ['saving', '저축'], ['card', '신용카드']], a.type, 'gAccType');
+    h += colField(sh, col);
     if (a.type !== 'card') h += `<div class="gfld"><label class="lb" for="g_bal">현재 잔액</label><input id="g_bal" data-gf="bal" inputmode="numeric" value="${a.bal != null ? commas(a.bal) : ''}" placeholder="0"></div>`;
     if (!sh.isNew) {
       const n = refCount('acc', a.id);
@@ -469,10 +490,19 @@ export function setupGb(X) {
     if (!sh.isNew && sh.delMode) return h + `<div class="acts"><button class="btn" data-act="gAccDelCancel">취소</button><button class="btn del" style="flex:2" data-act="gAccDelGo">${sh.delMode === 'keep' ? '보관하기' : '옮기고 삭제'}</button></div>`;
     return h + `<div class="acts">${sh.isNew ? '<button class="btn" data-act="close">닫기</button>' : `<button class="btn del" data-act="gAccDel">${a.closed ? '다시 쓰기' : '삭제'}</button>`}<button class="btn pri" data-act="gAccSave">저장</button></div>`;
   }
+  // 색: 한 칸만 보이고, 누르면 추천 색 · 직접 입력
+  function colField(sh, color) {
+    let h = `<div class="gfld"><span class="lb">색</span><button class="gcolrow" data-act="gColTog"><span class="sw" style="background:${color}"></span><span>${esc((color || '').toUpperCase())}</span><b>${sh.colOpen ? '−' : '+'}</b></button>`;
+    if (sh.colOpen) {
+      h += `<div class="gcolbox"><span class="lb">추천 색</span><div class="pal">${PALETTE.map((p) => `<button style="background:${p}" class="${p.toUpperCase() === (color || '').toUpperCase() ? 'on' : ''}" aria-label="${p}" data-act="gCatColor" data-v="${p}"></button>`).join('')}</div>`;
+      h += `<span class="lb">직접 입력</span><div class="hexrow"><input type="color" aria-label="색 고르기" data-gf="pick" value="${color}"><input data-gf="hex" value="${esc(color)}" autocomplete="off"></div></div>`;
+    }
+    return h + '</div>';
+  }
   function catHtml() {
     const sh = S.sheet, c = sh.draft;
     let h = `<div class="band in" style="background:${c.color};color:${textOn(c.color)}"><input id="g_name" data-gf="name" value="${esc(c.name || '')}" placeholder="분류 이름" autocomplete="off" style="color:inherit"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div><div class="gform">`;
-    h += `<div class="gfld"><span class="lb">색</span><div class="pal">${PALETTE.map((p) => `<button style="background:${p}" class="${p.toUpperCase() === (c.color || '').toUpperCase() ? 'on' : ''}" aria-label="${p}" data-act="gCatColor" data-v="${p}"></button>`).join('')}</div></div>`;
+    h += colField(sh, c.color);
     h += '<div class="gfld"><span class="lb">소분류</span>';
     (c.subs || []).forEach((s, i) => { h += `<div class="gsubrow"><input data-gs="${i}" value="${esc(s.name)}" placeholder="소분류 이름"><button class="ico" aria-label="빼기" data-act="gSubDel" data-i="${i}">${IC.x}</button></div>`; });
     h += `<button class="row" data-act="gSubAdd" style="font-size:14px">${small(IC.plus)}소분류 추가</button></div>`;
@@ -566,16 +596,16 @@ export function setupGb(X) {
     gAcc: (el) => { S.gbAcc[el.dataset.v] = !S.gbAcc[el.dataset.v]; render(); },
     gAccNew: () => { ensureConf(); openSheet({ kind: 'gacc', isNew: true, draft: { id: uid(), name: '', type: 'bank', bal: 0 } }); },
     gAccOpen: (el) => { const a = accOf(el.dataset.id); if (!a) return; openSheet({ kind: 'gacc', isNew: false, draft: { ...clone(a), bal: a.type === 'card' ? 0 : balance(a) } }); },
-    gAccType: (el) => { S.sheet.draft.type = el.dataset.v; render(); },
+    gAccType: (el) => { const d = S.sheet.draft; if (!d.color || Object.values(ACC_COL).includes(d.color)) d.color = ACC_COL[el.dataset.v]; d.type = el.dataset.v; render(); },
     gAccSave: () => {
       const sh = S.sheet, d = sh.draft;
       const name = (d.name || '').trim();
       if (!name) { sh.err = '이름을 입력해 주세요.'; render(); return; }
       const c = clone(conf());
-      if (sh.isNew) c.accounts.push({ id: d.id, name, type: d.type, init: d.type === 'card' ? 0 : d.bal || 0, initDate: todayStr(), adj: 0 });
+      if (sh.isNew) c.accounts.push({ id: d.id, name, type: d.type, color: d.color || ACC_COL[d.type], init: d.type === 'card' ? 0 : d.bal || 0, initDate: todayStr(), adj: 0 });
       else {
         const a = c.accounts.find((x) => x.id === d.id); if (!a) return closeSheet();
-        a.name = name; a.type = d.type;
+        a.name = name; a.type = d.type; if (d.color) a.color = d.color;
         if (d.type !== 'card') { const cur = balance({ ...a, adj: 0 }); a.adj = (d.bal || 0) - cur; }
       }
       saveConf(c); closeSheet();
@@ -604,7 +634,9 @@ export function setupGb(X) {
     },
     gCatNew: (el) => { ensureConf(); openSheet({ kind: 'gcat', k: el.dataset.k, isNew: true, draft: { id: uid(), name: '', color: PALETTE[0], subs: [] } }); },
     gCatOpen: (el) => { const c = catOf(el.dataset.k, el.dataset.id); if (c) openSheet({ kind: 'gcat', k: el.dataset.k, isNew: false, draft: clone({ subs: [], ...c }) }); },
-    gCatColor: (el) => { S.sheet.draft.color = el.dataset.v; render(); },
+    gCatColor: (el) => { S.sheet.draft.color = el.dataset.v; S.sheet.colOpen = false; render(); },
+    gCatFold: (el) => { const v = el.dataset.v; if (S.gbCatOpen.has(v)) S.gbCatOpen.delete(v); else S.gbCatOpen.add(v); render(); },
+    gColTog: () => { S.sheet.colOpen = !S.sheet.colOpen; render(); },
     gSubAdd: () => { S.sheet.draft.subs.push({ id: uid(), name: '' }); render(); },
     gSubDel: (el) => { S.sheet.draft.subs.splice(+el.dataset.i, 1); render(); },
     gCatSave: () => {
@@ -669,6 +701,7 @@ export function setupGb(X) {
     },
   };
   function setMode(m) {
+    if (m === 'gb' && !S.gbInit) { S.gbInit = true; S.gbMonth = curLabel(); }
     if (S.sheet) { S.sheet = null; if (history.state && history.state.sheet) history.back(); }
     S.mode = m;
     if (m === 'gb') { S.gbView = S.gbView || 'book'; if (S.settings.recPin && !S.gbUnlock) { render(); openSheet({ kind: 'pin', mode: 'open', v: '', then: 'gb' }); return; } }
@@ -695,6 +728,17 @@ export function setupGb(X) {
     if (f === 'amount' || f === 'bal') { d[f] = wonOf(el.value); if (!live) { el.value = d[f] ? commas(d[f]) : ''; if (sh.kind === 'gtx' && d.inst > 1) render(); } return true; }
     if (f === 'from' || f === 'to') { if (sh.kind === 'gxlsx') { sh[f] = el.value; return true; } }
     if (f === 'moveTo') { sh.moveTo = el.value; return true; }
+    if (f === 'pick' || f === 'hex') {
+      const v = el.value.trim().toUpperCase();
+      if (!/^#[0-9A-F]{6}$/.test(v)) return true;
+      d.color = v;
+      // 다시 그리지 않고 색만 바꿈 (입력 중 칸이 사라지지 않게)
+      const bd = document.querySelector('.sheet .band'); if (bd) { bd.style.background = v; bd.style.color = textOn(v); }
+      const sw = document.querySelector('.sheet .gcolrow .sw'); if (sw) sw.style.background = v;
+      const tx = document.querySelector('.sheet .gcolrow span:nth-child(2)'); if (tx) tx.textContent = v;
+      const other = document.querySelector(f === 'pick' ? '.sheet [data-gf="hex"]' : '.sheet [data-gf="pick"]'); if (other) other.value = f === 'pick' ? v : v.toLowerCase();
+      return true;
+    }
     if (f === 'inst') { d.inst = Math.max(1, Math.min(60, +el.value.replace(/[^\d]/g, '') || 1)); if (!live) render(); return true; }
     d[f] = el.value;
     if (!live && (f === 'cat' || f === 'acc')) { if (f === 'cat') d.sub = ''; render(); }

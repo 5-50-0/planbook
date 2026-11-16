@@ -25,6 +25,12 @@ object Render {
         // 일정 칸 색: 다크에서는 어둡게 눌러서
         fun chip(c: Int): Int = if (!dark) c else Color.rgb((Color.red(c) * 0.42f).toInt(), (Color.green(c) * 0.42f).toInt(), (Color.blue(c) * 0.42f).toInt())
         fun chipText(c: Int): Int = if (dark) Color.parseColor("#EDEDED") else Model.textOn(c)
+        // 할 일 (체크박스): 앱과 같이 할 일 색을 어둡게(다크는 밝게) 눌러서
+        private fun dk(c: Int, k: Float) = Color.rgb((Color.red(c) * (1 - k)).toInt(), (Color.green(c) * (1 - k)).toInt(), (Color.blue(c) * (1 - k)).toInt())
+        private fun lt(c: Int, k: Float) = Color.rgb((Color.red(c) + (255 - Color.red(c)) * k).toInt(), (Color.green(c) + (255 - Color.green(c)) * k).toInt(), (Color.blue(c) + (255 - Color.blue(c)) * k).toInt())
+        fun tdText(c: Int): Int = if (dark) lt(c, 0.45f) else dk(c, 0.55f)
+        fun tdBorder(c: Int): Int = if (dark) lt(c, 0.2f) else dk(c, 0.4f)
+        fun tdDone(c: Int): Int = if (dark) Color.parseColor("#5A5A5A") else dk(c, 0.08f)
     }
     private var T = Th(false, 0)
     fun theme(m: Model?) { T = if (m == null) Th(false, 0) else Th(m.widgetDark, m.widgetAlpha) }
@@ -65,6 +71,28 @@ object Render {
         if (maxW <= 0) return
         val n = paint.breakText(t, true, maxW, null)
         cv.drawText(t, 0, n, x, y, paint)
+    }
+
+    // 할 일 한 줄: 체크박스 + 제목 (완료는 체크 + 흐리게). (x0, y0) 왼쪽 위, h = 줄 높이
+    private fun todoRow(cv: Canvas, e: Ev, x0: Float, y0: Float, x1: Float, h: Float, box: Float, gap: Float, tp: Paint, dp: Float) {
+        val done = e.status != "progress"
+        val bx = x0 + 1 * dp; val by = y0 + (h - box) / 2
+        val st = Paint(Paint.ANTI_ALIAS_FLAG)
+        if (done) {
+            st.color = T.tdDone(e.color); st.style = Paint.Style.FILL
+            cv.drawRect(bx, by, bx + box, by + box, st)
+            st.color = Color.WHITE; st.style = Paint.Style.STROKE; st.strokeWidth = maxOf(1.2f * dp, box * 0.14f); st.strokeCap = Paint.Cap.ROUND; st.strokeJoin = Paint.Join.ROUND
+            val ck = Path().apply { moveTo(bx + box * 0.22f, by + box * 0.52f); lineTo(bx + box * 0.42f, by + box * 0.72f); lineTo(bx + box * 0.8f, by + box * 0.3f) }
+            cv.drawPath(ck, st)
+        } else {
+            st.color = if (T.dark) Color.rgb(28, 28, 30) else Color.WHITE; st.style = Paint.Style.FILL
+            cv.drawRect(bx, by, bx + box, by + box, st)
+            st.color = T.tdBorder(e.color); st.style = Paint.Style.STROKE; st.strokeWidth = 1.2f * dp
+            cv.drawRect(bx, by, bx + box, by + box, st)
+        }
+        tp.color = if (done) T.tdDone(e.color) else T.tdText(e.color)
+        val tx = bx + box + gap
+        clipText(cv, e.title, tx, y0 + h * 0.72f, x1 - tx - 1 * dp, tp)
     }
 
     // 동기화 아이콘 (웹과 같은 모양). (x, y) = 왼쪽 위, size = 한 변
@@ -175,6 +203,7 @@ object Render {
                     val x0 = pad + colW * s.col + 1 * dp
                     val x1 = pad + colW * (s.col + s.span) - 1 * dp
                     val y0 = top + dateH + s.lane * (laneH + 2 * dp)
+                    if (s.ev.type == "todo") { todoRow(cv, s.ev, x0, y0, x1, laneH, laneH * 0.62f, 3 * dp, chipText, dp); return@forEach }
                     fill.color = T.chip(s.ev.color)
                     cv.drawRect(x0, y0, x1, y0 + laneH, fill)
                     chipText.color = T.chipText(s.ev.color)
@@ -220,6 +249,7 @@ object Render {
         val show = if (list.size > fit) fit - 1 else list.size
         for (i in 0 until maxOf(show, 0)) {
             val e = list[i]
+            if (e.type == "todo") { todoRow(cv, e, pad, y, w - pad, boxH, 13 * dp, 7 * dp, tp, dp); y += boxH + gap; continue }
             fill.color = T.chip(e.color)
             cv.drawRect(pad, y, w - pad, y + boxH, fill)
             tp.color = T.chipText(e.color)

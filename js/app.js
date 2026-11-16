@@ -1551,6 +1551,31 @@ $app.addEventListener('touchend', ybEnd);
 $app.addEventListener('touchcancel', ybEnd);
 $app.addEventListener('contextmenu', (e) => { if (e.target.closest && e.target.closest('.yc')) e.preventDefault(); });
 
+// 좌우로 밀어서 넘기기: 플랜북 먼슬리·위클리, 머니북 달력 (폰·태블릿 터치)
+const swp = { x: 0, y: 0, t: 0, on: false };
+const swipeTarget = () => {
+  if (S.sheet || S.modePop || S.ybEdit) return null;
+  if (S.mode === 'gb') return S.gbView === 'book' && S.gbTab === 'cal' ? ['gMPrev', 'gMNext'] : null;
+  return S.view === 'month' || S.view === 'week' ? 'head' : null;
+};
+$app.addEventListener('touchstart', (e) => {
+  swp.on = false;
+  if (e.touches.length !== 1 || !swipeTarget()) return;
+  if (e.target.closest && e.target.closest('input,select,textarea,.sheet,.nav,.mpop')) return;
+  const t = e.touches[0]; swp.x = t.clientX; swp.y = t.clientY; swp.t = Date.now(); swp.on = true;
+}, { passive: true });
+$app.addEventListener('touchend', (e) => {
+  if (!swp.on) return;
+  swp.on = false;
+  const t = e.changedTouches[0], dx = t.clientX - swp.x, dy = t.clientY - swp.y;
+  if (Date.now() - swp.t > 700 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+  const tg = swipeTarget(); if (!tg) return;
+  const back = dx > 0;
+  if (Array.isArray(tg)) { ACT[back ? tg[0] : tg[1]](); return; }
+  const b = document.querySelector(`.head [aria-label="${back ? '이전' : '다음'}"]`);
+  if (b) b.click();
+}, { passive: true });
+
 const G = setupGb({ S, render, openSheet, closeSheet, toast, save, U, D, esc, uid, band, seg, errLine, armDel, wide, IC,
   HOLIDAYS, parse, ymd, addDays, todayStr, WD, EN_MONTH, monthWeeks, textOn, PALETTE, writeXlsx, stampName,
   backupCurrent, commas, wonOf, fmtMD, dayClass, clone, small, downloadBlob, APP_VERSION });
@@ -1614,7 +1639,7 @@ const ACT = {
     const sh = S.sheet, it = sh.draft, today = todayStr(), v = el.dataset.v;
     if (sh.isNew) { sh.stManual = true; it.status = v; render(); return; }
     // 지난 할 일을 완료·취소할 때: 등록일자에 남길지, 오늘로 옮길지 고름 (기본: 등록일자)
-    if (!sh.doneAt && v !== 'progress' && (it.status || 'progress') === 'progress' && it.start < today) { sh.doneAt = 'reg'; sh.regDate = it.start; }
+    if (!sh.doneAt && v !== 'progress' && (it.status || 'progress') === 'progress' && it.start !== today) { sh.doneAt = 'today'; sh.regDate = it.start; it.origStart = it.start; it.start = today; }
     if (v === 'progress' && sh.doneAt) { if (sh.doneAt === 'today') { it.start = sh.regDate; delete it.origStart; } sh.doneAt = null; }
     it.status = v; render();
   },
@@ -1901,6 +1926,8 @@ const TD_ACT = {
     const st = it.status || 'progress';
     const next = { ...it, status: st === 'done' ? 'progress' : 'done' };
     if (next.status === 'progress' && it.origStart) { next.start = it.origStart; delete next.origStart; }
+    // 체크한 날 = 완료한 날: 등록일자가 오늘이 아니면 오늘로 옮기고, 원래 날짜는 기억 (체크 풀면 되돌림)
+    if (next.status === 'done' && st === 'progress' && it.start !== todayStr()) { next.origStart = it.start; next.start = todayStr(); }
     save('items', next);
   },
 };

@@ -75,7 +75,7 @@ object Widgets {
         )
         for (r in 0 until 6) for (c in 0 until 7) {
             val d = grid[r][c].toString()
-            rv.setOnClickPendingIntent(ids[r][c], openIntent(ctx, d, "week", 2000 + (id % 100) * 100 + r * 7 + c))
+            rv.setOnClickPendingIntent(ids[r][c], openIntent(ctx, d, "month", 2000 + (id % 100) * 100 + r * 7 + c))
         }
         mgr.updateAppWidget(id, rv)
     }
@@ -93,7 +93,7 @@ object Widgets {
             else if (!m.hasData) Render.message(w, h, dp, "불러오는 중")
             else Render.today(m, w, h, dp, today)
         rv.setImageViewBitmap(R.id.img, bmp)
-        rv.setOnClickPendingIntent(R.id.root, openIntent(ctx, today.toString(), "week", 9000 + id % 1000))
+        rv.setOnClickPendingIntent(R.id.root, openIntent(ctx, today.toString(), "month", 9000 + id % 1000))
         rv.setOnClickPendingIntent(R.id.sync, syncIntent(ctx))
         mgr.updateAppWidget(id, rv)
     }

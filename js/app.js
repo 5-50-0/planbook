@@ -2035,14 +2035,16 @@ let brT;
 const bridgeRefresh = () => { if (!BR) return; clearTimeout(brT); brT = setTimeout(() => { try { BR.refresh(); } catch (e) { /* 무시 */ } }, 1500); };
 function openAt(d, v) {
   if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) { S.sel = d; const t = parse(d); S.month = [t.getFullYear(), t.getMonth()]; }
-  if (v && ['month', 'week', 'mini', 'year', 'routine'].includes(v)) S.view = v;
+  // 위젯에서 열면 먼슬리로 (예전 앱은 'week'를 보내므로 같이 먼슬리로)
+  if (v === 'week') v = 'month';
+  if (v && ['month', 'week', 'mini', 'year', 'routine'].includes(v)) { S.view = v; S.mode = 'pb'; S.modePop = false; }
   if (S.sheet) closeSheet(); else render();
 }
 window.__pbOpen = openAt;
 {
   const q = new URLSearchParams(location.search);
   if (q.get('d') || q.get('v')) {
-    const d = q.get('d'), v = q.get('v');
+    const d = q.get('d'), v = q.get('v') === 'week' ? 'month' : q.get('v');
     if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) { S.sel = d; const t = parse(d); S.month = [t.getFullYear(), t.getMonth()]; }
     if (v && ['month', 'week', 'mini', 'year', 'routine'].includes(v)) S.view = v;
     history.replaceState(null, '', location.pathname);

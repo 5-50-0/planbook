@@ -29,6 +29,7 @@ const IC = {
   sync: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 12a8 8 0 0 1-14.3 4.9M4 12A8 8 0 0 1 18.3 7.1"/><path d="M18.5 3v4.3h-4.3M5.5 21v-4.3h4.3"/></svg>',
   l: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M15 6l-6 6 6 6"/></svg>',
   r: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>',
   set: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>',
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>',
@@ -282,15 +283,19 @@ function miniBody() {
         ${n.content ? `<div class="mb">${esc(n.content)}</div>` : ''}${it ? `<div class="lkd"><i style="background:${colorOf(it)}"></i>${fmtDot(it.start)} ${esc(it.title)}</div>` : ''}</button>`;
     }).join('');
   } else {
-    h += salSections();
     h += recSection('cert', '자격증', ['자격증명', '취득일', '발급기관'], (r) => [r.name, (r.date || '').replace(/-/g, '.'), r.issuer], (a, b) => (a.date || '').localeCompare(b.date || ''));
     h += recSection('edu', '교육', ['교육명', '기관', '수료일'], (r) => [r.name, r.org, (r.end || '').replace(/-/g, '.')], (a, b) => (b.end || '').localeCompare(a.end || ''));
   }
   return h + '</div>';
 }
+// 기록 칸 접기: 제목을 누르면 접고 펼침, 접은 상태는 이 기기에 기억 (처음엔 모두 접힘)
+const recOpen = (k) => S.recFold.has(k);
+const secHead = (k, label, sum, plus) => `<div class="sh fold" data-act="recFold" data-v="${k}"><span class="sht">${label}${!recOpen(k) && sum ? `<small>${sum}</small>` : ''}</span>${plus || ''}<i class="fd ${recOpen(k) ? 'on' : ''}">${IC.down}</i></div>`;
 function recSection(kind, label, heads, cols, sort) {
   const rows = S.records.filter((r) => r.kind === kind).sort(sort);
-  return `<div class="sec"><div class="sh"><span>${label}</span><button aria-label="${label} 추가" data-act="recNew" data-v="${kind}">${small(IC.plus, 18)}</button></div>
+  const head = secHead(kind, label, rows.length ? `${rows.length}건` : '', `<button aria-label="${label} 추가" data-act="recNew" data-v="${kind}">${small(IC.plus, 18)}</button>`);
+  if (!recOpen(kind)) return `<div class="sec shut">${head}</div>`;
+  return `<div class="sec">${head}
     <table><thead><tr>${heads.map((x) => `<th>${x}</th>`).join('')}</tr></thead><tbody>
     ${rows.map((r) => `<tr data-act="recOpen" data-id="${r.id}">${cols(r).map((v) => `<td>${esc(v ?? '')}</td>`).join('')}</tr>`).join('')}
     </tbody></table></div>`;
@@ -494,7 +499,7 @@ function settingsBody() {
   h += `<button class="acc" data-act="acc" data-v="acct"><span>계정</span><span>${A.acct ? '−' : '+'}</span></button>`;
   if (A.acct) {
     h += `<div class="row">로그인 계정<span class="vl">${esc(S.user?.email || '')}</span></div>
-      <button class="row" data-act="pinSet">기록 잠금 비밀번호<span class="vl">${S.settings.recPin ? '설정됨' : '없음'}</span></button>
+      <button class="row" data-act="pinSet">머니북 잠금 비밀번호<span class="vl">${S.settings.recPin ? '설정됨' : '없음'}</span></button>
       <button class="row red" data-act="logout">로그아웃</button>
       <div class="row">앱 버전<span class="vl">${APP_VERSION}</span></div>`;
   }
@@ -919,28 +924,40 @@ function lastCompany() {
   all.sort((a, b) => (a.created || 0) - (b.created || 0));
   return all.length ? all[all.length - 1].company : '';
 }
+// 연봉 · 성과급 (머니북 리포트 › 연봉 탭에서 보여줌. 잠금은 머니북 비밀번호로)
 function salSections() {
   const { contracts, bonuses } = salData();
   const plus = (act, label) => `<button aria-label="${label} 추가" data-act="${act}">${small(IC.plus, 18)}</button>`;
-  if (S.settings.recPin && !S.unlocked) {
-    return `<div class="lockbox">${IC.lock}<b>연봉 · 성과급</b><button class="btn pri" data-act="pinOpen">열기</button></div>`;
+  const yrs = salYears(contracts, bonuses);
+  const lastC = contracts[contracts.length - 1], lastB = bonuses[0];
+  let h = '';
+  h += `<div class="sec ${recOpen('salY') ? '' : 'shut'}">${secHead('salY', '연도별 요약', yrs[0] ? `${yrs[0].y} · ${yrs[0].end ? man(yrs[0].end.base) : ''}` : '')}`;
+  if (recOpen('salY')) {
+    h += `<table class="sal"><thead><tr><th>연도</th><th class="r">연말 연봉</th><th class="r">인상률</th><th class="r">성과급</th></tr></thead><tbody>`;
+    h += yrs.map((r) => `<tr><td>${r.y}</td><td class="r">${r.end ? man(r.end.base) : ''}</td><td class="r up">${r.rate}</td><td class="r">${r.bsum ? man(r.bsum) : ''}</td></tr>`).join('');
+    h += '</tbody></table>';
   }
-  const lockBtn = S.settings.recPin ? `<button class="lk" data-act="relock">${IC.unlock}잠그기</button>` : '';
-  let h = `<div class="sec"><div class="sh"><span>연도별 요약</span>${lockBtn}</div><table class="sal"><thead><tr><th>연도</th><th class="r">연말 연봉</th><th class="r">인상률</th><th class="r">성과급</th></tr></thead><tbody>`;
-  h += salYears(contracts, bonuses).map((r) => `<tr><td>${r.y}</td><td class="r">${r.end ? man(r.end.base) : ''}</td><td class="r up">${r.rate}</td><td class="r">${r.bsum ? man(r.bsum) : ''}</td></tr>`).join('');
-  h += '</tbody></table></div>';
+  h += '</div>';
   // 계약: 회사별 묶음, 최근 계약이 있는 회사부터
   const byCo = new Map();
   contracts.slice().reverse().forEach((c) => { const k = c.company || ''; if (!byCo.has(k)) byCo.set(k, []); byCo.get(k).push(c); });
-  h += `<div class="sec"><div class="sh"><span>연봉 계약</span>${plus('ctNew', '연봉 계약')}</div><table class="sal"><thead><tr><th>적용일</th><th class="r">기본연봉</th><th class="r">인상률</th><th>직급</th><th>구분</th></tr></thead><tbody>`;
-  byCo.forEach((list, co) => {
-    h += `<tr class="co"><td colspan="5">${esc(co || '회사 미입력')}</td></tr>`;
-    h += list.map((c) => { const p = prevContract(contracts, c); return `<tr data-act="ctOpen" data-id="${c.id}"><td>${dotYmd(c.date)}</td><td class="r">${man(c.base)}</td><td class="r up">${p ? rateTxt(c.base, p.base) : ''}</td><td>${esc(c.rank || '')}</td><td>${ctTypeTxt(c.type)}</td></tr>`; }).join('');
-  });
-  h += '</tbody></table></div>';
-  h += `<div class="sec"><div class="sh"><span>성과급</span>${plus('bnNew', '성과급')}</div><table class="sal"><thead><tr><th>지급일</th><th>회사</th><th class="r">금액</th><th>메모</th></tr></thead><tbody>`;
-  h += bonuses.map((b) => `<tr data-act="bnOpen" data-id="${b.legacyOf || b.id}"><td>${dotYmd(b.date)}</td><td>${esc(b.company || '')}</td><td class="r">${man(b.amount)}</td><td>${esc(b.memo || '')}</td></tr>`).join('');
-  h += '</tbody></table></div>';
+  h += `<div class="sec ${recOpen('salC') ? '' : 'shut'}">${secHead('salC', '연봉 계약', lastC ? `${dotYmd(lastC.date)} · ${man(lastC.base)}` : '', plus('ctNew', '연봉 계약'))}`;
+  if (recOpen('salC')) {
+    h += `<table class="sal"><thead><tr><th>적용일</th><th class="r">기본연봉</th><th class="r">인상률</th><th>직급</th><th>구분</th></tr></thead><tbody>`;
+    byCo.forEach((list, co) => {
+      h += `<tr class="co"><td colspan="5">${esc(co || '회사 미입력')}</td></tr>`;
+      h += list.map((c) => { const p = prevContract(contracts, c); return `<tr data-act="ctOpen" data-id="${c.id}"><td>${dotYmd(c.date)}</td><td class="r">${man(c.base)}</td><td class="r up">${p ? rateTxt(c.base, p.base) : ''}</td><td>${esc(c.rank || '')}</td><td>${ctTypeTxt(c.type)}</td></tr>`; }).join('');
+    });
+    h += '</tbody></table>';
+  }
+  h += '</div>';
+  h += `<div class="sec ${recOpen('salB') ? '' : 'shut'}">${secHead('salB', '성과급', lastB ? `${dotYmd(lastB.date)} · ${man(lastB.amount)}` : '', plus('bnNew', '성과급'))}`;
+  if (recOpen('salB')) {
+    h += `<table class="sal"><thead><tr><th>지급일</th><th>회사</th><th class="r">세전</th><th class="r">실수령</th><th>메모</th></tr></thead><tbody>`;
+    h += bonuses.map((b) => `<tr data-act="bnOpen" data-id="${b.legacyOf || b.id}"><td>${dotYmd(b.date)}</td><td>${esc(b.company || '')}</td><td class="r">${man(b.amount)}</td><td class="r">${b.net ? man(b.net) : ''}</td><td>${esc(b.memo || '')}</td></tr>`).join('');
+    h += '</tbody></table>';
+  }
+  h += '</div>';
   return h;
 }
 const wonField = (label, f, won) => `<label class="lb" for="f_${f}">${label}</label><input id="f_${f}" data-f="${f}" inputmode="numeric" autocomplete="off" value="${won ? commas(won) : ''}"><p class="wonh" id="wh_${f}">${wonText(won)}</p>`;
@@ -959,17 +976,21 @@ function ctHtml() {
 function bnHtml() {
   const sh = S.sheet, b = sh.draft;
   let h = band('#111111', '성과급') + field('회사', 'company', b.company);
-  h += `<div class="two"><div>${field('지급일', 'date', b.date, 'date')}</div><div>${wonField('금액', 'amount', b.amount)}</div></div>`;
+  h += `<div class="two"><div>${field('지급일', 'date', b.date, 'date')}</div><div>${wonField('세전 금액', 'amount', b.amount)}</div></div>`;
+  h += `<div class="two"><div>${wonField('실수령액', 'net', b.net)}</div><div><span class="lb">세금 · 공제</span><div class="taxv" id="bnTax">${taxTxt(b)}</div><p class="wonh" id="bnTaxR">${taxRate(b)}</p></div></div>`;
   h += field('메모', 'memo', b.memo);
   return h + errLine(sh) + acts('bnDel', 'bnSave', sh.isNew);
 }
+const taxTxt = (b) => (b.amount && b.net ? commas(b.amount - b.net) : '');
+const taxRate = (b) => (b.amount && b.net ? `${(((b.amount - b.net) / b.amount) * 100).toFixed(1)}%` : '');
 // 금액 칸: 입력 중에는 아래 글자만 바꾸고, 칸을 벗어나면 쉼표를 붙임
 function salLive(el) {
   const sh = S.sheet, f = el.dataset.f;
-  if (!sh || (sh.kind !== 'ct' && sh.kind !== 'bn') || (f !== 'base' && f !== 'amount')) return false;
+  if (!sh || (sh.kind !== 'ct' && sh.kind !== 'bn') || (f !== 'base' && f !== 'amount' && f !== 'net')) return false;
   const won = wonOf(el.value);
   sh.draft[f] = won;
   const hp = document.getElementById('wh_' + f); if (hp) hp.textContent = wonText(won);
+  if (sh.kind === 'bn') { const t = document.getElementById('bnTax'), r = document.getElementById('bnTaxR'); if (t) t.textContent = taxTxt(sh.draft); if (r) r.textContent = taxRate(sh.draft); }
   if (sh.kind === 'ct') {
     const p = prevContract(salData().contracts, sh.draft);
     const r = document.getElementById('ctRate'); if (r) r.textContent = p && won ? `직전 계약 대비 ${rateTxt(won, p.base)}` : '';
@@ -1047,7 +1068,8 @@ const SAL_ACT = {
     const sh = S.sheet, b = { ...sh.draft };
     b.company = (b.company || '').trim();
     if (!b.date) { sh.err = '지급일을 골라 주세요.'; render(); return; }
-    if (!b.amount) { sh.err = '금액을 입력해 주세요.'; render(); return; }
+    if (!b.amount) { sh.err = '세전 금액을 입력해 주세요.'; render(); return; }
+    if (!b.net) delete b.net;
     save('records', b); closeSheet();
   },
   bnDel: () => { if (!armDel()) return; D.deleteDocIn(U(), 'records', S.sheet.draft.id); closeSheet(); },
@@ -1069,6 +1091,12 @@ const SAL_ACT = {
   },
   pinRemove: () => { const st = { ...S.settings }; delete st.recPin; saveSettings(st); S.unlocked = false; closeSheet(); toast('잠금을 껐어요'); },
   relock: () => { S.unlocked = false; render(); },
+  recFold: (el, e) => {
+    if (e && e.target.closest && e.target.closest('button')) return;
+    const k = el.dataset.v; if (S.recFold.has(k)) S.recFold.delete(k); else S.recFold.add(k);
+    try { localStorage.setItem('pb_recFold', JSON.stringify([...S.recFold])); } catch (er) { /* 무시 */ }
+    render();
+  },
 };
 
 // ---------- 전체 그리기 ----------
@@ -1474,7 +1502,7 @@ async function exportXlsx(from, to) {
     { name: '회의', headers: ['일자', '시간', '제목', '회의장소', '참석자', '내용', '연결 일정'], widths: [12, 8, 30, 18, 24, 60, 30], rows: meet.map((n) => ({ 일자: n.date, 시간: n.time || '', 제목: n.title, 회의장소: n.place || '', 참석자: n.attendees || '', 내용: n.content || '', '연결 일정': linkT(n) })) },
     { name: '메모', headers: ['날짜', '제목', '내용', '연결 일정'], widths: [12, 30, 70, 30], rows: memo.map((n) => ({ 날짜: n.date, 제목: n.title, 내용: n.content || '', '연결 일정': linkT(n) })) },
     { name: '연봉 계약', headers: ['회사', '적용일', '기본연봉(원)', '직급', '구분', '메모'], widths: [20, 12, 16, 10, 8, 30], rows: salData().contracts.map((c) => ({ 회사: c.company || '', 적용일: c.date, '기본연봉(원)': c.base, 직급: c.rank || '', 구분: ctTypeTxt(c.type), 메모: c.memo || '' })) },
-    { name: '성과급', headers: ['회사', '지급일', '금액(원)', '메모'], widths: [20, 12, 16, 30], rows: salData().bonuses.slice().reverse().map((b) => ({ 회사: b.company || '', 지급일: b.date, '금액(원)': b.amount, 메모: b.memo || '' })) },
+    { name: '성과급', headers: ['회사', '지급일', '세전(원)', '실수령(원)', '메모'], widths: [20, 12, 16, 16, 30], rows: salData().bonuses.slice().reverse().map((b) => ({ 회사: b.company || '', 지급일: b.date, '세전(원)': b.amount, '실수령(원)': b.net || '', 메모: b.memo || '' })) },
     { name: '자격증', headers: ['자격증명', '취득일', '발급기관'], widths: [24, 12, 20], rows: recs('cert').map((r) => ({ 자격증명: r.name, 취득일: r.date, 발급기관: r.issuer })) },
     { name: '교육', headers: ['교육명', '기관', '시작일', '수료일'], widths: [30, 20, 12, 12], rows: recs('edu').map((r) => ({ 교육명: r.name, 기관: r.org, 시작일: r.start || '', 수료일: r.end })) },
   ]);
@@ -1578,7 +1606,7 @@ $app.addEventListener('touchend', (e) => {
 
 const G = setupGb({ S, render, openSheet, closeSheet, toast, save, U, D, esc, uid, band, seg, errLine, armDel, wide, IC,
   HOLIDAYS, parse, ymd, addDays, todayStr, WD, EN_MONTH, monthWeeks, textOn, PALETTE, writeXlsx, stampName,
-  backupCurrent, commas, wonOf, fmtMD, dayClass, clone, small, downloadBlob, APP_VERSION });
+  backupCurrent, commas, wonOf, fmtMD, dayClass, clone, small, downloadBlob, APP_VERSION, salSections });
 const ACT = {
   ...G.ACT,
   modePop: () => { S.modePop = true; render(); },
@@ -1939,6 +1967,7 @@ const FOLD_ACT = {
   },
 };
 try { S.rtFold = JSON.parse(localStorage.getItem('pb_rtFold') || '{}'); } catch (e) { S.rtFold = {}; }
+try { S.recFold = new Set(JSON.parse(localStorage.getItem('pb_recFold') || '[]')); } catch (e) { S.recFold = new Set(); }
 const DAY_ACT = {
   // 날짜 숫자: PC는 오른쪽 목록만 그 날로, 폰은 그 날 목록 창
   selDay: (el) => {

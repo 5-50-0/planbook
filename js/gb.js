@@ -382,7 +382,7 @@ export function setupGb(X) {
       const [yy, m] = S.gbMonth;
       const l = monthAgg(yy, m);
       const PQ = periodOf(yy, m);
-      h = `<div class="head"><div class="big"><h1>${m + 1}</h1><div class="sub"><p class="y">${yy}</p><p class="m">${md(PQ.start)} – ${md(PQ.end)}</p></div></div>${tools('gMPrev', 'gMNext')}</div>` + tabs([['mon', '월간'], ['year', '연간']], 'mon', 'gStatTab') + sumBar(incOf(l), expOf(l));
+      h = `<div class="head"><div class="big"><h1>${m + 1}</h1><div class="sub"><p class="y">${yy}</p><p class="m">${md(PQ.start)} – ${md(PQ.end)}</p></div></div>${tools('gMPrev', 'gMNext')}</div>` + tabs([['mon', '월간'], ['year', '연간'], ['sal', '연봉']], 'mon', 'gStatTab') + sumBar(incOf(l), expOf(l));
       const ex = l.filter(isE), tot = sum(ex, amtE) || 1;
       const prev = monthAgg(m === 0 ? yy - 1 : yy, m === 0 ? 11 : m - 1).filter(isE);
       const rows = catList('exp').map((c) => ({ c, v: sum(ex.filter((e) => e.cat === c.id), amtE), pv: sum(prev.filter((e) => e.cat === c.id), amtE) })).filter((r) => r.v || r.pv).sort((a, b) => b.v - a.v);
@@ -418,8 +418,9 @@ export function setupGb(X) {
       if (sv.length) h += `<div class="ggh"><b>저축</b><span>${won(sum(sv, ([, v]) => v))}</span></div>${sv.map(([a, v]) => `<div class="gcr two"><span>${esc(a.name)}</span><span></span><span class="v">${won(v)}</span></div>`).join('')}`;
       return h + `<p class="mut" style="font-size:12px;margin-top:8px">${tot ? '' : ''}</p></div>`;
     }
+    if (S.gbStatTab === 'sal') return headWord('리포트', '', tools('', '')) + tabs([['mon', '월간'], ['year', '연간'], ['sal', '연봉']], 'sal', 'gStatTab') + `<div class="gpad gbot gsal">${X.salSections()}</div>`;
     const xl = wide() ? `<button class="btn sm" style="margin-right:8px" data-act="gXlsx">엑셀로 내보내기</button>` : '';
-    h = headWord('리포트', `<div class="sub"><p class="y">&nbsp;</p><p class="m">${y}</p></div>`, tools('gYPrev', 'gYNext', xl)) + tabs([['mon', '월간'], ['year', '연간']], 'year', 'gStatTab');
+    h = headWord('리포트', `<div class="sub"><p class="y">&nbsp;</p><p class="m">${y}</p></div>`, tools('gYPrev', 'gYNext', xl)) + tabs([['mon', '월간'], ['year', '연간'], ['sal', '연봉']], 'year', 'gStatTab');
     const rows = yearRows(y);
     const cm = curLabel()[0] === y ? curLabel()[1] : -1;
     if (wide()) {

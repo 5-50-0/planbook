@@ -303,10 +303,11 @@ input[type=date]{min-width:0;padding:0 8px}
 .sec .sh .lk{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:400;width:auto;white-space:nowrap;color:#fff}
 .sec .sh .lk svg{width:15px;height:15px}
 table.sal{table-layout:fixed}
-table.sal .c{text-align:right;text-overflow:ellipsis}
+table.sal .c{text-overflow:ellipsis}
+table.sal th,table.sal td,table.sal .r,table.sal .c{text-align:center}
+table.sal tr.co td{text-align:left}
 table.sal td.b{font-weight:500}
-table.sal td,table.sal th{padding-left:8px;padding-right:8px}
-table.sal .r{text-align:right}
+table.sal td,table.sal th{padding-left:4px;padding-right:4px}
 table.sal td.up{color:#2E7D4F}
 table.sal tr.co td{background:#F4F4F4;font-weight:500;font-size:12px;color:#111;padding:6px 10px;cursor:default}
 .wonh{font-size:12px;color:#6B6B6B;margin:5px 0 0;min-height:16px}

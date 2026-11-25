@@ -924,8 +924,8 @@ function lastCompany() {
   all.sort((a, b) => (a.created || 0) - (b.created || 0));
   return all.length ? all[all.length - 1].company : '';
 }
-// 세 표 모두 같은 칸 너비: 날짜 | 금액 | 금액·비율 | 짧은 글 | 합계·글
-const SAL_COLS = '<colgroup><col style="width:24%"><col style="width:19%"><col style="width:17%"><col style="width:18%"><col style="width:22%"></colgroup>';
+// 세 표 모두 같은 칸 너비(날짜 칸만 조금 넓게), 모든 칸 가운데 정렬
+const SAL_COLS = '<colgroup><col style="width:24%"><col style="width:19%"><col style="width:19%"><col style="width:19%"><col style="width:19%"></colgroup>';
 // 연봉 · 성과급 (머니북 리포트 › 연봉 탭에서 보여줌. 잠금은 머니북 비밀번호로)
 function salSections() {
   const { contracts, bonuses } = salData();

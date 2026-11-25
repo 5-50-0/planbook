@@ -3,6 +3,8 @@
 export const GB_COLS = ['gbTx', 'gbFixed', 'gbConf'];
 
 export function setupGb(X) {
+  // 글 쓰는 칸: 한국어 칸 표시, 폰·태블릿에서는 autocomplete="off" 빼기 (키보드가 영어로 바뀌는 것 막기)
+  const KO = (() => { let t = false; try { t = matchMedia('(pointer:coarse)').matches; } catch (e) { /* 무시 */ } return `lang="ko"${t ? '' : ' autocomplete="off"'}`; })();
   const { S, render, openSheet, closeSheet, toast, save, U, D, esc, uid, band, seg, errLine, armDel, wide, IC,
     HOLIDAYS, parse, ymd, addDays, todayStr, WD, EN_MONTH, monthWeeks, textOn, PALETTE, writeXlsx, stampName,
     backupCurrent, commas, wonOf, fmtMD, dayClass, clone, small, downloadBlob, APP_VERSION } = X;
@@ -523,7 +525,7 @@ export function setupGb(X) {
     ? `<div class="gfld"><label class="lb" for="g_${f}">${label}</label><div class="gdate"><input id="g_${f}" type="date" data-gf="${f}" value="${esc(val ?? '')}" ${extra}><span>${esc(val || '')}</span></div></div>`
     : `<div class="gfld"><label class="lb" for="g_${f}">${label}</label><input id="g_${f}" type="${type}" data-gf="${f}" value="${esc(val ?? '')}" ${extra}></div>`;
   const accOpts = (types) => accs().filter((a) => types.includes(a.type)).map((a) => [a.id, a.name]);
-  const amtBand = (color, d) => `<div class="band in gband" style="background:${color};color:${textOn(color)}"><input id="g_title" data-gf="title" value="${esc(d.title || '')}" autocomplete="off" style="color:inherit"><input id="g_amount" data-gf="amount" inputmode="numeric" autocomplete="off" value="${d.amount ? commas(d.amount) : ''}" style="color:inherit"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div>`;
+  const amtBand = (color, d) => `<div class="band in gband" style="background:${color};color:${textOn(color)}"><input id="g_title" data-gf="title" value="${esc(d.title || '')}" ${KO} style="color:inherit"><input id="g_amount" data-gf="amount" inputmode="numeric" autocomplete="off" value="${d.amount ? commas(d.amount) : ''}" style="color:inherit"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div>`;
   function catSel(kind, d) {
     const cs = catList(kind);
     const c = catOf(kind, d.cat);
@@ -643,7 +645,7 @@ export function setupGb(X) {
   function accHtml() {
     const sh = S.sheet, a = sh.draft;
     const col = a.color || ACC_COL[a.type];
-    let h = `<div class="band in" style="background:${col};color:${textOn(col)}"><input id="g_name" data-gf="name" value="${esc(a.name || '')}" autocomplete="off" style="color:inherit"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div><div class="gform">`;
+    let h = `<div class="band in" style="background:${col};color:${textOn(col)}"><input id="g_name" data-gf="name" value="${esc(a.name || '')}" ${KO} style="color:inherit"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div><div class="gform">`;
     h += seg([['bank', '통장'], ['saving', '저축'], ['card', '신용카드'], ['loan', '대출']], a.type, 'gAccType');
     h += colField(sh, col);
     if (a.type !== 'card') h += `<div class="gfld"><label class="lb" for="g_bal">${a.type === 'loan' ? '남은 금액' : '현재 잔액'}</label><input id="g_bal" data-gf="bal" inputmode="numeric" value="${a.bal != null ? commas(a.bal) : ''}"></div>`;
@@ -673,7 +675,7 @@ export function setupGb(X) {
   }
   function catHtml() {
     const sh = S.sheet, c = sh.draft;
-    let h = `<div class="band in" style="background:#111111;color:#fff"><input id="g_name" data-gf="name" value="${esc(c.name || '')}" autocomplete="off" style="color:inherit"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div><div class="gform">`;
+    let h = `<div class="band in" style="background:#111111;color:#fff"><input id="g_name" data-gf="name" value="${esc(c.name || '')}" ${KO} style="color:inherit"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div><div class="gform">`;
     h += '<div class="gfld"><span class="lb">소분류</span>';
     (c.subs || []).forEach((s, i) => { h += `<div class="gsubrow"><input data-gs="${i}" value="${esc(s.name)}"><button class="ico" aria-label="빼기" data-act="gSubDel" data-i="${i}">${IC.x}</button></div>`; });
     h += `<button class="row" data-act="gSubAdd" style="font-size:14px">${small(IC.plus)}소분류 추가</button></div>`;

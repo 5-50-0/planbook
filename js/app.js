@@ -509,7 +509,11 @@ function settingsBody() {
 // ---------- 팝업 ----------
 const band = (color, text, closeAct = 'close') => `<div class="band" style="background:${color};color:${textOn(color)}"><span id="bandT">${esc(text)}</span><button class="x" aria-label="닫기" data-act="${closeAct}">${IC.x}</button></div>`;
 const seg = (opts, cur, act, n) => `<div class="seg" style="grid-template-columns:repeat(${n || opts.length},minmax(0,1fr))">${opts.map(([k, l]) => `<button class="${cur === k ? 'on' : ''}" data-act="${act}" data-v="${k}">${l}</button>`).join('')}</div>`;
-const bandIn = (color, val, f = 'title', label = '제목') => `<div class="band in" style="background:${color};color:${textOn(color)}"><input id="bandT" data-f="${f}" value="${esc(val ?? '')}" aria-label="${label}" style="color:inherit" autocomplete="off"><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div>`;
+// 글 쓰는 칸: 한국어 칸으로 표시. 폰·태블릿에서는 autocomplete="off"를 빼야 키보드가 한글로 열림
+// (안드로이드 크롬은 autocomplete="off" 칸을 '추천 없음' 칸으로 넘겨서, 갤럭시 키보드가 영어로 바뀜)
+const TOUCH = (() => { try { return matchMedia('(pointer:coarse)').matches; } catch (e) { return false; } })();
+const KO = `lang="ko"${TOUCH ? '' : ' autocomplete="off"'}`;
+const bandIn = (color, val, f = 'title', label = '제목') => `<div class="band in" style="background:${color};color:${textOn(color)}"><input id="bandT" data-f="${f}" value="${esc(val ?? '')}" aria-label="${label}" style="color:inherit" ${KO}><button class="x" aria-label="닫기" data-act="close">${IC.x}</button></div>`;
 const field = (label, f, val, type = 'text', extra = '') => `<label class="lb" for="f_${f}">${label}</label><input id="f_${f}" type="${type}" data-f="${f}" value="${esc(val ?? '')}" ${extra}>`;
 const area = (label, f, val, h = 96) => `<label class="lb" for="f_${f}">${label}</label><textarea id="f_${f}" data-f="${f}" style="height:${h}px">${esc(val ?? '')}</textarea>`;
 const errLine = (sh) => (sh.err ? `<p class="err">${esc(sh.err)}</p>` : '');

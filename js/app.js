@@ -924,6 +924,8 @@ function lastCompany() {
   all.sort((a, b) => (a.created || 0) - (b.created || 0));
   return all.length ? all[all.length - 1].company : '';
 }
+// 세 표 모두 같은 칸 너비: 날짜 | 금액 | 금액·비율 | 짧은 글 | 합계·글
+const SAL_COLS = '<colgroup><col style="width:24%"><col style="width:19%"><col style="width:17%"><col style="width:18%"><col style="width:22%"></colgroup>';
 // 연봉 · 성과급 (머니북 리포트 › 연봉 탭에서 보여줌. 잠금은 머니북 비밀번호로)
 function salSections() {
   const { contracts, bonuses } = salData();
@@ -933,8 +935,8 @@ function salSections() {
   let h = '';
   h += `<div class="sec ${recOpen('salY') ? '' : 'shut'}">${secHead('salY', '연도별 요약', yrs[0] ? `${yrs[0].y} · ${yrs[0].end ? man(yrs[0].end.base) : ''}` : '')}`;
   if (recOpen('salY')) {
-    h += `<table class="sal"><thead><tr><th>연도</th><th class="r">연말 연봉</th><th class="r">인상률</th><th class="r">성과급</th></tr></thead><tbody>`;
-    h += yrs.map((r) => `<tr><td>${r.y}</td><td class="r">${r.end ? man(r.end.base) : ''}</td><td class="r up">${r.rate}</td><td class="r">${r.bsum ? man(r.bsum) : ''}</td></tr>`).join('');
+    h += `<table class="sal">${SAL_COLS}<thead><tr><th>연도</th><th class="r">연말 연봉</th><th class="r">인상률</th><th class="r">성과급</th><th class="r">합계</th></tr></thead><tbody>`;
+    h += yrs.map((r) => { const t = (r.end ? r.end.base : 0) + (r.bsum || 0); return `<tr><td>${r.y}</td><td class="r">${r.end ? man(r.end.base) : ''}</td><td class="r up">${r.rate}</td><td class="r">${r.bsum ? man(r.bsum) : ''}</td><td class="r b">${t ? man(t) : ''}</td></tr>`; }).join('');
     h += '</tbody></table>';
   }
   h += '</div>';
@@ -943,18 +945,18 @@ function salSections() {
   contracts.slice().reverse().forEach((c) => { const k = c.company || ''; if (!byCo.has(k)) byCo.set(k, []); byCo.get(k).push(c); });
   h += `<div class="sec ${recOpen('salC') ? '' : 'shut'}">${secHead('salC', '연봉 계약', lastC ? `${dotYmd(lastC.date)} · ${man(lastC.base)}` : '', plus('ctNew', '연봉 계약'))}`;
   if (recOpen('salC')) {
-    h += `<table class="sal"><thead><tr><th>적용일</th><th class="r">기본연봉</th><th class="r">인상률</th><th>직급</th><th>구분</th></tr></thead><tbody>`;
+    h += `<table class="sal">${SAL_COLS}<thead><tr><th>적용일</th><th class="r">기본연봉</th><th class="r">인상률</th><th class="c">직급</th><th class="c">구분</th></tr></thead><tbody>`;
     byCo.forEach((list, co) => {
       h += `<tr class="co"><td colspan="5">${esc(co || '회사 미입력')}</td></tr>`;
-      h += list.map((c) => { const p = prevContract(contracts, c); return `<tr data-act="ctOpen" data-id="${c.id}"><td>${dotYmd(c.date)}</td><td class="r">${man(c.base)}</td><td class="r up">${p ? rateTxt(c.base, p.base) : ''}</td><td>${esc(c.rank || '')}</td><td>${ctTypeTxt(c.type)}</td></tr>`; }).join('');
+      h += list.map((c) => { const p = prevContract(contracts, c); return `<tr data-act="ctOpen" data-id="${c.id}"><td>${dotYmd(c.date)}</td><td class="r">${man(c.base)}</td><td class="r up">${p ? rateTxt(c.base, p.base) : ''}</td><td class="c">${esc(c.rank || '')}</td><td class="c">${ctTypeTxt(c.type)}</td></tr>`; }).join('');
     });
     h += '</tbody></table>';
   }
   h += '</div>';
   h += `<div class="sec ${recOpen('salB') ? '' : 'shut'}">${secHead('salB', '성과급', lastB ? `${dotYmd(lastB.date)} · ${man(lastB.amount)}` : '', plus('bnNew', '성과급'))}`;
   if (recOpen('salB')) {
-    h += `<table class="sal"><thead><tr><th>지급일</th><th>회사</th><th class="r">세전</th><th class="r">실수령</th><th>메모</th></tr></thead><tbody>`;
-    h += bonuses.map((b) => `<tr data-act="bnOpen" data-id="${b.legacyOf || b.id}"><td>${dotYmd(b.date)}</td><td>${esc(b.company || '')}</td><td class="r">${man(b.amount)}</td><td class="r">${b.net ? man(b.net) : ''}</td><td>${esc(b.memo || '')}</td></tr>`).join('');
+    h += `<table class="sal">${SAL_COLS}<thead><tr><th>지급일</th><th class="r">세전</th><th class="r">실수령</th><th class="c">회사</th><th class="c">메모</th></tr></thead><tbody>`;
+    h += bonuses.map((b) => `<tr data-act="bnOpen" data-id="${b.legacyOf || b.id}"><td>${dotYmd(b.date)}</td><td class="r">${man(b.amount)}</td><td class="r">${b.net ? man(b.net) : ''}</td><td class="c">${esc(b.company || '')}</td><td class="c">${esc(b.memo || '')}</td></tr>`).join('');
     h += '</tbody></table>';
   }
   h += '</div>';

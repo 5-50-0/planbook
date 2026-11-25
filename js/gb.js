@@ -296,11 +296,13 @@ export function setupGb(X) {
       if (!cBud && !cu) return;
       total += cBud; used += cu;
       body += `<button class="ggh gghb" data-act="gBudKey" data-k="c:${c.id}"><b>${esc(c.name)}</b><span>${won(cu)} / ${won(cBud)}${cb ? '' : ''}</span></button>`;
-      if (!subs.length) { body += rowH('c:' + c.id, '전체', cb, cu, fixedKeys.has('c:' + c.id)); return; }
-      sbs.filter((r) => r.b || r.u).forEach((r) => { body += rowH(r.x.id, r.x.name, r.b, r.u, fixedKeys.has(r.x.id)); });
-      // 그 외: 대분류 예산 중 소분류에 나누지 않은 몫, 예산 없는 소분류 · 소분류 없이 쓴 돈
-      const restU = cu - sum(sbs.filter((r) => r.b), (r) => r.u);
-      if (cb > sbSum || (cb && restU)) body += rowH('', '그 외', Math.max(0, cb - sbSum), restU, false);
+      // 소분류에 예산을 안 나눴으면: 대분류 한 줄로 (소분류에 쓴 돈도 대분류 예산에서 빠짐)
+      const withB = sbs.filter((r) => r.b);
+      if (!withB.length) { body += rowH('c:' + c.id, '전체', cb, cu, fixedKeys.has('c:' + c.id)); return; }
+      withB.forEach((r) => { body += rowH(r.x.id, r.x.name, r.b, r.u, fixedKeys.has(r.x.id)); });
+      // 그 외: 대분류 예산 중 소분류에 나누지 않은 몫 + 예산 없는 소분류 · 소분류 없이 쓴 돈
+      const restU = cu - sum(withB, (r) => r.u);
+      if (cb > sbSum || restU) body += rowH('', '그 외', Math.max(0, cb - sbSum), restU, false);
     });
     const pct = total ? Math.min(100, Math.round((used / total) * 100)) : 0;
     h += `<div class="gpad gbot"><div class="gbx"><div class="l"><span>남은 예산</span><span>${left ? `남은 ${left}일` : ''}</span></div><div class="big2">${won(total - used)}</div><div class="gbar"><i class="${used > total ? 'over' : ''}" style="width:${pct}%"></i></div><div class="r"><span>${won(used)} 씀</span><span class="mut">예산 ${won(total)}</span></div></div>`;
